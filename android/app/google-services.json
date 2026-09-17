@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "488590025606",
+    "project_id": "queue-system-67874",
+    "storage_bucket": "queue-system-67874.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:488590025606:android:6826fa5aa1c2ead44f8207",
+        "android_client_info": {
+          "package_name": "com.damia.pd2qts"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBrKCKhR84nHeNIpGT_P_O3C3h3XRvFmOA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
