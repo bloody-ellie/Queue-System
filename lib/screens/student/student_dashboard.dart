@@ -12,7 +12,8 @@ class StudentDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
-    final studentId = auth.currentUser!.uid;
+    final user = auth.currentUser!;
+    final studentId = user.uid;
 
     return Scaffold(
       appBar: AppBar(
@@ -31,93 +32,121 @@ class StudentDashboard extends StatelessWidget {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+          // ✅ Student info card
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade400, Colors.blue.shade700],
+              ),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ElevatedButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const RequestServiceScreen()),
+                Text(
+                  user.fullName,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
-                  child: const Text('Request Service (Tuition/Document)'),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.badge, color: Colors.white70, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Student No: ${user.studentNumber ?? "N/A"}',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.school, color: Colors.white70, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Year Level: ${user.yearLevel ?? "N/A"}',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const RequestServiceScreen()),
+                ),
+                icon: const Icon(Icons.add),
+                label: const Text('Request Service'),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
           Expanded(
             child: StreamBuilder<List<QueueTicket>>(
-              stream: Provider.of<QueueProvider>(context)
-                  .getTicketsForStudent(studentId),
+              stream: Provider.of<QueueProvider>(context).getTicketsForStudent(studentId),
               builder: (ctx, snapshot) {
-                  print('📊 Student tickets snapshot:');
-                  print('  - Has data: ${snapshot.hasData}');
-                  print('  - Data length: ${snapshot.data?.length ?? 0}');
-                  print('  - Error: ${snapshot.error}');
-                // ✅ Handle all connection states
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                
                 if (snapshot.hasError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error, color: Colors.red, size: 48),
-                        const SizedBox(height: 8),
-                        Text('Error loading tickets: ${snapshot.error}'),
-                      ],
-                    ),
-                  );
+                  return Center(child: Text('Error: ${snapshot.error}'));
                 }
-
                 final tickets = snapshot.data ?? [];
-                
                 if (tickets.isEmpty) {
                   return const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.airplane_ticket, size: 48, color: Colors.grey),
-                        SizedBox(height: 8),
+                        Icon(Icons.airplane_ticket, size: 64, color: Colors.grey),
+                        SizedBox(height: 16),
                         Text('No tickets yet.'),
-                        Text(
-                          'Request a service to get started!',
-                          style: TextStyle(color: Colors.grey),
-                        ),
+                        Text('Request a service to get started!',
+                            style: TextStyle(color: Colors.grey)),
                       ],
                     ),
                   );
                 }
-
                 return ListView.builder(
+                  padding: const EdgeInsets.all(8),
                   itemCount: tickets.length,
                   itemBuilder: (ctx, i) {
                     final ticket = tickets[i];
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                       child: ListTile(
-                        leading: CircleAvatar(
-                          child: Text('${ticket.queueNumber}'),
-                        ),
+                        leading: CircleAvatar(child: Text('${ticket.queueNumber}')),
                         title: Text('Ticket #${ticket.queueNumber}'),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('Status: ${ticket.status.toUpperCase()}'),
                             Text('Time: ${_formatTime(ticket.timeSlot)}'),
+                            if (ticket.serviceItems.isNotEmpty)
+                              Text(
+                                'Services: ${ticket.serviceItems.map((s) => s.name).join(', ')}',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                           ],
                         ),
-                        trailing: Icon(
-                          ticket.status == 'serving' 
-                              ? Icons.warning_amber
-                              : ticket.status == 'served'
-                                  ? Icons.check_circle
-                                  : Icons.arrow_forward_ios,
-                          color: _getStatusColor(ticket.status),
-                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -136,24 +165,10 @@ class StudentDashboard extends StatelessWidget {
     );
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'waiting':
-        return Colors.orange;
-      case 'serving':
-        return Colors.green;
-      case 'served':
-        return Colors.blue;
-      case 'passed':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
   String _formatTime(DateTime time) {
-  final hour = time.hour > 12 ? time.hour - 12 : time.hour;
-  final minute = time.minute.toString().padLeft(2, '0');
-  final period = time.hour >= 12 ? 'PM' : 'AM';
-  return '$hour:$minute $period';
-}
+    final hour = time.hour > 12 ? time.hour - 12 : time.hour;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
 }

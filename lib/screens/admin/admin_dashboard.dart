@@ -5,7 +5,7 @@ import 'manage_documents.dart';
 import 'manage_users.dart';
 import 'manage_schedules.dart';
 import 'manage_appointments.dart'; 
-import 'daily_report_screen.dart';  
+//import 'daily_report_screen.dart';  
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
@@ -50,15 +50,16 @@ class AdminDashboard extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => const ManageUsers()),
               ),
             ),
-            _buildCard(
-  context,
-  'View Daily Reports',
-  Icons.receipt_long,
-  () => Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => const DailyReportScreen()),
-  ),
-),
+ /*           _buildCard(
+            context,
+            'View Daily Reports',
+            Icons.receipt_long,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DailyReportScreen()),
+            ),
+            ), REMOVED BECAUSE NOT INCLUDED IN MY PAPERS*/
+
             _buildCard(
               context,
               'Manage Schedules & Time Slots',

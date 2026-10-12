@@ -161,10 +161,10 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                       child: Text(
-                        _hasSelection() 
-                            ? 'Book Slot & Get QR ${_getTotalText()}'
-                            : 'Select at least one service',
-                      ),
+                      _hasSelection() 
+                          ? 'Book Slot ${_getTotalText()}'  // ✅ QR removed
+                          : 'Select at least one service',
+                    ),
                     ),
                   ),
                 ],
@@ -359,106 +359,131 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
     }
   }
 
-  void _submitRequest(String studentId) async {
-    if (!_hasSelection()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one service')),
+void _submitRequest(String studentId) async {
+  if (!_hasSelection()) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Select at least one service')),
+    );
+    return;
+  }
+  
+  if (_selectedSlot == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Pick a time slot')),
+    );
+    return;
+  }
+
+  try {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+    );
+
+    // ✅ GET THE USER HERE
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final user = auth.currentUser!;
+
+    int count = await _fs.getTicketCountForSlot(_selectedSlot!);
+    int queueNumber = count + 1;
+
+    String ticketId = const Uuid().v4();
+    
+    // Build service items list
+    List<ServiceItem> serviceItems = [];
+    if (_includeTuition) {
+      serviceItems.add(ServiceItem(name: 'Tuition', type: 'tuition', amount: 0.0));
+    }
+    for (var docId in _selectedDocumentIds) {
+      final doc = _documentTypes.firstWhere((d) => d.id == docId);
+      serviceItems.add(ServiceItem(
+        name: doc.name,
+        type: 'document',
+        amount: doc.price,
+        documentTypeId: doc.id,
+      ));
+    }
+
+    // ✅ Now `user` is defined
+    QueueTicket ticket = QueueTicket(
+      id: ticketId,
+      studentId: studentId,
+      paymentId: '',
+      queueNumber: queueNumber,
+      status: 'waiting',
+      timeSlot: _selectedSlot!,
+      createdAt: DateTime.now(),
+      serviceItems: serviceItems,
+      studentNumber: user.studentNumber ?? 'N/A',
+      studentName: user.fullName,
+      yearLevel: user.yearLevel ?? 'N/A',
+    );
+    
+    await _fs.createQueueTicket(ticket);
+
+    List<String> paymentIds = [];
+    
+    // 1. Tuition - amount 0 (free)
+    if (_includeTuition) {
+      final payment = Payment(
+        id: '',
+        studentId: studentId,
+        amount: 0.0,
+        type: 'tuition',
+        documentTypeId: null,
+        documentName: 'Tuition',
+        status: 'pending',
+        ticketId: ticketId,
       );
-      return;
+      String paymentId = await _fs.createPayment(payment);
+      paymentIds.add(paymentId);
     }
     
-    if (_selectedSlot == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pick a time slot')),
+    // 2. Documents - with actual prices
+    for (var docId in _selectedDocumentIds) {
+      final doc = _documentTypes.firstWhere((d) => d.id == docId);
+      final payment = Payment(
+        id: '',
+        studentId: studentId,
+        amount: doc.price,
+        type: 'document',
+        documentTypeId: docId,
+        documentName: doc.name,
+        status: 'pending',
+        ticketId: ticketId,
       );
-      return;
+      String paymentId = await _fs.createPayment(payment);
+      paymentIds.add(paymentId);
     }
 
-    try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => const Center(child: CircularProgressIndicator()),
+    Navigator.pop(context);
+
+    print('✅ Ticket created:');
+    print('  - Ticket ID: $ticketId');
+    print('  - Queue #: $queueNumber');
+    print('  - Student: ${user.fullName} (${user.studentNumber})');
+    print('  - Payments: ${paymentIds.length}');
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ticket #$queueNumber created! (${paymentIds.length} payment(s))'),
+          backgroundColor: Colors.green,
+        ),
       );
-
-      int count = await _fs.getTicketCountForSlot(_selectedSlot!);
-      int queueNumber = count + 1;
-
-      String ticketId = const Uuid().v4();
-      QueueTicket ticket = QueueTicket(
-        id: ticketId,
-        studentId: studentId,
-        paymentId: '', // Will be updated with first payment ID
-        queueNumber: queueNumber,
-        status: 'waiting',
-        timeSlot: _selectedSlot!,
-        qrCode: ticketId,
-        createdAt: DateTime.now(),
+      Navigator.pop(context);
+    }
+  } catch (e) {
+    Navigator.pop(context);
+    print('❌ Error creating request: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
-      
-      await _fs.createQueueTicket(ticket);
-
-      List<String> paymentIds = [];
-      
-      // 1. Tuition - amount 0 (free)
-      if (_includeTuition) {
-        final payment = Payment(
-          id: '',
-          studentId: studentId,
-          amount: 0.0,  // ✅ Tuition is free
-          type: 'tuition',
-          documentTypeId: null,
-          documentName: 'Tuition',
-          status: 'pending',
-          ticketId: ticketId,
-        );
-        String paymentId = await _fs.createPayment(payment);
-        paymentIds.add(paymentId);
-      }
-      
-      // 2. Documents - with actual prices
-      for (var docId in _selectedDocumentIds) {
-        final doc = _documentTypes.firstWhere((d) => d.id == docId);
-        final payment = Payment(
-          id: '',
-          studentId: studentId,
-          amount: doc.price,
-          type: 'document',
-          documentTypeId: docId,
-          documentName: doc.name,
-          status: 'pending',
-          ticketId: ticketId,
-        );
-        String paymentId = await _fs.createPayment(payment);
-        paymentIds.add(paymentId);
-      }
-
-      Navigator.pop(context);
-
-      print('✅ Ticket created:');
-      print('  - Ticket ID: $ticketId');
-      print('  - Queue #: $queueNumber');
-      print('  - Payments: ${paymentIds.length}');
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ticket #$queueNumber created! (${paymentIds.length} payment(s))'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      Navigator.pop(context);
-      print('❌ Error creating request: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
     }
   }
+}
 
   String _formatDate(DateTime date) {
     return '${date.month}/${date.day}/${date.year}';

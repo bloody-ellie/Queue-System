@@ -3,6 +3,7 @@ import '../models/document_type.dart';
 import '../models/payment.dart';
 import '../models/queue_ticket.dart';
 import '../models/schedule.dart';
+import '../models/user.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -325,5 +326,62 @@ Future<List<Payment>> getPaymentsForTicket(String ticketId) async {
     
     return result;
   }
+
+
+/// Search tickets by student number, name, or queue number
+Future<List<QueueTicket>> searchTickets(String query) async {
+  try {
+    // Get only active tickets (waiting or serving)
+    final snapshot = await _firestore
+        .collection('queueTickets')
+        .where('status', whereIn: ['waiting', 'serving'])
+        .get();
+
+    final queryLower = query.toLowerCase().trim();
+    if (queryLower.isEmpty) return [];
+
+    return snapshot.docs
+        .map((doc) => QueueTicket.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+        .where((ticket) =>
+            ticket.studentNumber.toLowerCase().contains(queryLower) ||
+            ticket.studentName.toLowerCase().contains(queryLower) ||
+            ticket.queueNumber.toString() == queryLower)
+        .toList();
+  } catch (e) {
+    print('❌ Error searching tickets: $e');
+    return [];
+  }
+}
+
+/// Get all active tickets (waiting or serving) for cashier
+Future<List<QueueTicket>> getActiveTickets() async {
+  try {
+    final snapshot = await _firestore
+        .collection('queueTickets')
+        .where('status', whereIn: ['waiting', 'serving'])
+        .get();
+
+    return snapshot.docs
+        .map((doc) => QueueTicket.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+        .toList();
+  } catch (e) {
+    print('❌ Error getting active tickets: $e');
+    return [];
+  }
+}
+
+/// Get user by UID
+Future<AppUser?> getUserById(String uid) async {
+  try {
+    final doc = await _firestore.collection('users').doc(uid).get();
+    if (doc.exists) {
+      return AppUser.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+    }
+    return null;
+  } catch (e) {
+    print('❌ Error getting user: $e');
+    return null;
+  }
+}
   
 }

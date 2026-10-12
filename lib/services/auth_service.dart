@@ -29,28 +29,44 @@ class AuthService {
 
   Future<void> signOut() async => await _auth.signOut();
 
-  // Create user (admin only)
-  Future<bool> createUser(String email, String password, String name, String role) async {
-    try {
-      UserCredential result = await _auth.createUserWithEmailAndPassword(
-          email: email, password: password);
-      User? user = result.user;
-      if (user != null) {
-        AppUser newUser = AppUser(
-          uid: user.uid,
-          email: email,
-          name: name,
-          role: role,
-        );
-        await _firestore.collection('users').doc(user.uid).set(newUser.toMap());
-        return true;
-      }
-      return false;
-    } catch (e) {
-      print('Create user error: $e');
-      return false;
+  // Create user (admin only, updated for removal of qr-code)
+ Future<bool> createUser({
+  required String email,
+  required String password,
+  required String name,
+  required String role,
+  String? studentNumber,
+  String? firstName,
+  String? lastName,
+  String? middleInitial,
+  String? yearLevel,
+}) async {
+  try {
+    UserCredential result = await _auth.createUserWithEmailAndPassword(
+        email: email, password: password);
+    User? user = result.user;
+    
+    if (user != null) {
+      AppUser newUser = AppUser(
+        uid: user.uid,
+        email: email,
+        name: name,
+        role: role,
+        studentNumber: studentNumber,
+        firstName: firstName,
+        lastName: lastName,
+        middleInitial: middleInitial,
+        yearLevel: yearLevel,
+      );
+      await _firestore.collection('users').doc(user.uid).set(newUser.toMap());
+      return true;
     }
+    return false;
+  } catch (e) {
+    print('Create user error: $e');
+    return false;
   }
+}
 
   // Get current user stream
   Stream<AppUser?> get userStream {

@@ -18,9 +18,9 @@ dependencies:
   # State Management
   provider: ^6.1.1
 
-  # QR Code Generation & Scanning
-  qr_flutter: ^4.1.0
-  mobile_scanner: ^5.2.3  # ✅ REPLACES qr_code_scanner
+# REMOVED QR CODE # QR Code Generation & Scanning
+  #qr_flutter: ^4.1.0
+  #mobile_scanner: ^5.2.3  # ✅ REPLACES qr_code_scanner
 
   # Utilities
   intl: ^0.18.1

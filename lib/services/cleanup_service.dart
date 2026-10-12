@@ -1,16 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/queue_ticket.dart';  // ✅ ADD THIS
-import '../models/payment.dart';       // ✅ ADD THIS
-import 'report_service.dart';
+import '../models/queue_ticket.dart';
+import '../models/payment.dart';
 
 class CleanupService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final ReportService _reportService = ReportService();
 
   /// Check if it's past 5 PM (17:00)
   bool isPastOfficeHours() {
     final now = DateTime.now();
-    return now.hour >= 17; // 5:00 PM or later
+    return now.hour >= 17;
   }
 
   /// Check if cleanup has already been done today
@@ -42,7 +40,6 @@ class CleanupService {
     try {
       await _firestore.collection('system').doc('cleanupLog').set({
         'lastCleanup': DateTime.now().toIso8601String(),
-        'lastCleanupDate': DateTime.now().toIso8601String(),
       });
       print('✅ Cleanup recorded');
     } catch (e) {
@@ -50,7 +47,7 @@ class CleanupService {
     }
   }
 
-   /// Get tickets for a specific date based on timeSlot (appointment date)
+  /// Get tickets for a specific date
   Future<List<QueueTicket>> getTicketsByDate(DateTime date) async {
     try {
       final start = DateTime(date.year, date.month, date.day, 0, 0, 0);
@@ -70,6 +67,7 @@ class CleanupService {
       return [];
     }
   }
+
   /// Get payments for a specific date
   Future<List<Payment>> getPaymentsByDate(DateTime date) async {
     try {
@@ -91,17 +89,15 @@ class CleanupService {
     }
   }
 
-  /// MAIN: Run daily cleanup with report
+  /// MAIN: Run daily cleanup (no report generation)
   Future<void> runDailyCleanup() async {
     print('🔄 Running daily cleanup check...');
     
-    // Check if it's past office hours
     if (!isPastOfficeHours()) {
       print('⏰ Still office hours (before 5 PM). Skipping cleanup.');
       return;
     }
     
-    // Check if cleanup already done today
     if (await wasCleanupDoneToday()) {
       print('✅ Cleanup already done today. Skipping.');
       return;
@@ -112,44 +108,23 @@ class CleanupService {
     try {
       final yesterday = DateTime.now().subtract(const Duration(days: 1));
       
-      // ✅ STEP 1: Generate and save report BEFORE deleting
-      print('📊 Generating report for ${_formatDate(yesterday)}...');
-      final report = await _reportService.generateReport(yesterday);
-      
-      if (report != null) {
-        await _reportService.saveReport(report);
-        print('✅ Report saved!');
-      } else {
-        print('⚠️ No report generated (no data found).');
-      }
-      
-      // ✅ STEP 2: Delete tickets
       final tickets = await getTicketsByDate(yesterday);
       for (var ticket in tickets) {
         await _firestore.collection('queueTickets').doc(ticket.id).delete();
       }
       
-      // ✅ STEP 3: Delete payments
       final payments = await getPaymentsByDate(yesterday);
       for (var payment in payments) {
         await _firestore.collection('payments').doc(payment.id).delete();
       }
       
-      // ✅ STEP 4: Record cleanup
       await recordCleanup();
       
       print('✅ Cleanup completed!');
       print('  - Deleted ${tickets.length} tickets');
       print('  - Deleted ${payments.length} payments');
-      if (report != null) {
-        print('  - Report saved: ${report.studentsServed} students served');
-      }
     } catch (e) {
       print('❌ Cleanup failed: $e');
     }
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.month}/${date.day}/${date.year}';
   }
 }

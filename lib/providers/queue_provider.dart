@@ -37,7 +37,12 @@ class QueueProvider extends ChangeNotifier {
   }
 
   // For cashier: get ticket by scanning QR (QR code is the ticket ID)
-  Future<QueueTicket?> getTicketByQR(String qrCode) async {
-    return await _firestore.getTicket(qrCode);
-  }
+  //Future<QueueTicket?> getTicketByQR(String qrCode) async {
+  //return await _firestore.getTicket(qrCode);
+  // }
+
+  // Search instead of QR scan
+Future<List<QueueTicket>> searchTickets(String query) async {
+  return await _firestore.searchTickets(query);
+}
 }
