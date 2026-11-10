@@ -185,7 +185,6 @@ class StudentDashboard extends StatelessWidget {
     },
   ),
 ),
-          ),
         ],
       ),
     );

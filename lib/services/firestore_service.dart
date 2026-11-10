@@ -211,6 +211,33 @@ class FirestoreService {
     }
   }
 
+  /// Get document type IDs that the student already has pending
+/// (waiting or serving tickets that include that document).
+Future<Set<String>> getPendingDocumentIdsForStudent(String studentId) async {
+  try {
+    final snapshot = await _firestore
+        .collection('queueTickets')
+        .where('studentId', isEqualTo: studentId)
+        .where('status', whereIn: ['waiting', 'serving'])
+        .get();
+
+    final docIds = <String>{};
+    for (var doc in snapshot.docs) {
+      final ticket = QueueTicket.fromMap(
+          doc.id, doc.data() as Map<String, dynamic>);
+      for (var item in ticket.serviceItems) {
+        if (item.type == 'document' && item.documentTypeId != null) {
+          docIds.add(item.documentTypeId!);
+        }
+      }
+    }
+    return docIds;
+  } catch (e) {
+    print('❌ Error getting pending documents: $e');
+    return <String>{};
+  }
+}
+
 // ---------- Cashier: Search (TODAY ONLY) ----------
   Future<List<QueueTicket>> searchTickets(String query) async {
     try {
