@@ -14,8 +14,7 @@ class _ManageSchedulesState extends State<ManageSchedules> {
   List<Schedule> _schedules = [];
   bool _isLoading = true;
 
-  // Form controllers
-  final _dayController = TextEditingController();
+  // Form state
   DateTime? _selectedDate;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
@@ -37,8 +36,8 @@ class _ManageSchedulesState extends State<ManageSchedules> {
   }
 
   void _showAddScheduleDialog() {
-    _dayController.clear();
-    _selectedDate = DateTime.now();
+    // Reset form state
+    _selectedDate = null; // Let admin pick (default today)
     _startTime = const TimeOfDay(hour: 9, minute: 0);
     _endTime = const TimeOfDay(hour: 10, minute: 0);
     _maxStudents = 5;
@@ -54,27 +53,38 @@ class _ManageSchedulesState extends State<ManageSchedules> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextField(
-                      controller: _dayController,
-                      decoration: const InputDecoration(
-                        labelText: 'Day (e.g., Monday)',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+                    // ✅ Date picker (no manual day field)
                     ListTile(
                       title: Text(
                         _selectedDate == null
                             ? 'Select Date'
                             : 'Date: ${_formatDate(_selectedDate!)}',
                       ),
+                      subtitle: _selectedDate == null
+                          ? null
+                          : Text(
+                              _getDayOfWeek(_selectedDate!),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue,
+                              ),
+                            ),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: () async {
+                        // ✅ Normalize to start of today (midnight)
+                        final now = DateTime.now();
+                        final today =
+                            DateTime(now.year, now.month, now.day);
+
                         final date = await showDatePicker(
                           context: context,
-                          initialDate: _selectedDate ?? DateTime.now(),
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime.now().add(const Duration(days: 30)),
+                          initialDate: _selectedDate == null ||
+                                  _selectedDate!.isBefore(today)
+                              ? today
+                              : _selectedDate!,
+                          firstDate: today, // ✅ No past dates
+                          lastDate:
+                              today.add(const Duration(days: 30)),
                         );
                         if (date != null) {
                           setDialogState(() {
@@ -84,6 +94,8 @@ class _ManageSchedulesState extends State<ManageSchedules> {
                       },
                     ),
                     const SizedBox(height: 12),
+
+                    // Start Time
                     ListTile(
                       title: Text(
                         'Start Time: ${_formatTime(_startTime!)}',
@@ -92,7 +104,8 @@ class _ManageSchedulesState extends State<ManageSchedules> {
                       onTap: () async {
                         final time = await showTimePicker(
                           context: context,
-                          initialTime: _startTime ?? const TimeOfDay(hour: 9, minute: 0),
+                          initialTime: _startTime ??
+                              const TimeOfDay(hour: 9, minute: 0),
                         );
                         if (time != null) {
                           setDialogState(() {
@@ -102,6 +115,8 @@ class _ManageSchedulesState extends State<ManageSchedules> {
                       },
                     ),
                     const SizedBox(height: 12),
+
+                    // End Time
                     ListTile(
                       title: Text(
                         'End Time: ${_formatTime(_endTime!)}',
@@ -110,7 +125,8 @@ class _ManageSchedulesState extends State<ManageSchedules> {
                       onTap: () async {
                         final time = await showTimePicker(
                           context: context,
-                          initialTime: _endTime ?? const TimeOfDay(hour: 10, minute: 0),
+                          initialTime: _endTime ??
+                              const TimeOfDay(hour: 10, minute: 0),
                         );
                         if (time != null) {
                           setDialogState(() {
@@ -120,6 +136,8 @@ class _ManageSchedulesState extends State<ManageSchedules> {
                       },
                     ),
                     const SizedBox(height: 12),
+
+                    // Max Students
                     Row(
                       children: [
                         const Text('Max Students: '),
@@ -138,14 +156,20 @@ class _ManageSchedulesState extends State<ManageSchedules> {
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.blue.shade50,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             _maxStudents.toString(),
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
@@ -171,12 +195,29 @@ class _ManageSchedulesState extends State<ManageSchedules> {
   }
 
   Future<void> _createSchedule() async {
-    if (_maxStudents < 1) {
-      _maxStudents = 5;
+    // ✅ Guard: reject past dates
+    if (_selectedDate != null) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final pickedDay = DateTime(
+        _selectedDate!.year,
+        _selectedDate!.month,
+        _selectedDate!.day,
+      );
+
+      if (pickedDay.isBefore(today)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Cannot create schedules for past dates'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
     }
 
-    if (_dayController.text.isEmpty ||
-        _selectedDate == null ||
+    // Required fields
+    if (_selectedDate == null ||
         _startTime == null ||
         _endTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -185,18 +226,22 @@ class _ManageSchedulesState extends State<ManageSchedules> {
       return;
     }
 
+    // End time must be after start time
     if (_startTime!.hour > _endTime!.hour ||
         (_startTime!.hour == _endTime!.hour &&
             _startTime!.minute >= _endTime!.minute)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('End time must be after start time')),
+        const SnackBar(
+          content: Text('End time must be after start time'),
+        ),
       );
       return;
     }
 
+    // ✅ Build schedule with auto-derived day
     final schedule = Schedule(
       id: '',
-      day: _dayController.text,
+      day: _getDayOfWeek(_selectedDate!), // auto-derived
       date: _selectedDate!,
       startTime: _startTime!,
       endTime: _endTime!,
@@ -206,7 +251,7 @@ class _ManageSchedulesState extends State<ManageSchedules> {
     );
 
     await _fs.createSchedule(schedule);
-    
+
     if (mounted) {
       Navigator.pop(context);
       _loadSchedules();
@@ -216,7 +261,6 @@ class _ManageSchedulesState extends State<ManageSchedules> {
     }
   }
 
-  // ✅ DELETE SCHEDULE - RESTORED
   Future<void> _deleteSchedule(Schedule schedule) async {
     // Prevent deletion if students have booked
     if (schedule.bookedStudents.isNotEmpty) {
@@ -225,8 +269,9 @@ class _ManageSchedulesState extends State<ManageSchedules> {
         builder: (_) => AlertDialog(
           title: const Text('Cannot Delete'),
           content: Text(
-            'This schedule has ${schedule.bookedStudents.length} student(s) booked. '
-            'You cannot delete it unless you remove the bookings first.',
+            'This schedule has ${schedule.bookedStudents.length} '
+            'student(s) booked. You cannot delete it unless you '
+            'remove the bookings first.',
           ),
           actions: [
             TextButton(
@@ -243,7 +288,10 @@ class _ManageSchedulesState extends State<ManageSchedules> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Delete Schedule'),
-        content: Text('Delete schedule for ${schedule.day} ${schedule.timeRange}?'),
+        content: Text(
+          'Delete schedule for ${schedule.dayName} '
+          '${_formatDate(schedule.date)} ${schedule.timeRange}?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -261,15 +309,30 @@ class _ManageSchedulesState extends State<ManageSchedules> {
     if (confirm == true) {
       await _fs.deleteSchedule(schedule.id);
       _loadSchedules();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Schedule deleted!')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Schedule deleted!')),
+        );
+      }
     }
   }
 
   Future<void> _toggleScheduleAvailability(Schedule schedule) async {
     await _fs.updateScheduleAvailability(schedule.id, !schedule.isAvailable);
     _loadSchedules();
+  }
+
+  String _getDayOfWeek(DateTime date) {
+    const days = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    return days[date.weekday - 1];
   }
 
   String _formatDate(DateTime date) {
@@ -285,52 +348,65 @@ class _ManageSchedulesState extends State<ManageSchedules> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ Show only non-past schedules
+    final visibleSchedules =
+        _schedules.where((s) => !s.isPast).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Manage Schedules'),
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
+            tooltip: 'Add Schedule',
             onPressed: _showAddScheduleDialog,
           ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _schedules.isEmpty
+          : visibleSchedules.isEmpty
               ? const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.calendar_today, size: 64, color: Colors.grey),
+                      Icon(Icons.calendar_today,
+                          size: 64, color: Colors.grey),
                       SizedBox(height: 16),
-                      Text('No schedules created yet.'),
+                      Text('No upcoming schedules.'),
                       Text(
-                        'Tap the + button to add a schedule.',
+                        'Tap + to add a schedule.',
                         style: TextStyle(color: Colors.grey),
                       ),
                     ],
                   ),
                 )
               : ListView.builder(
-                  itemCount: _schedules.length,
+                  itemCount: visibleSchedules.length,
                   itemBuilder: (ctx, i) {
-                    final schedule = _schedules[i];
+                    final schedule = visibleSchedules[i];
                     return Card(
                       margin: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 4,
                       ),
                       child: ListTile(
-                        title: Text('${schedule.day} - ${schedule.timeRange}'),
+                        title: Text(
+                          '${schedule.dayName} - ${schedule.timeRange}',
+                        ),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Date: ${_formatDate(schedule.date)}'),
                             Text(
-                              'Students: ${schedule.bookedStudents.length}/${schedule.maxStudents}',
+                              'Date: ${_formatDate(schedule.date)}',
+                            ),
+                            Text(
+                              'Students: ${schedule.bookedStudents.length}/'
+                              '${schedule.maxStudents}',
                               style: TextStyle(
-                                color: schedule.isFull ? Colors.red : Colors.green,
+                                color: schedule.isFull
+                                    ? Colors.red
+                                    : Colors.green,
                               ),
                             ),
                           ],
@@ -340,13 +416,15 @@ class _ManageSchedulesState extends State<ManageSchedules> {
                           children: [
                             Switch(
                               value: schedule.isAvailable,
-                              onChanged: (_) => _toggleScheduleAvailability(schedule),
+                              onChanged: (_) =>
+                                  _toggleScheduleAvailability(schedule),
                             ),
-                            // ✅ DELETE BUTTON - RESTORED
                             if (schedule.bookedStudents.isEmpty)
                               IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _deleteSchedule(schedule),
+                                icon: const Icon(Icons.delete,
+                                    color: Colors.red),
+                                onPressed: () =>
+                                    _deleteSchedule(schedule),
                               ),
                           ],
                         ),

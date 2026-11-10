@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 class Schedule {
   final String id;
-  final String day; // 'Monday', 'Tuesday', etc.
-  final DateTime date; // Specific date
+  final String day; // 'Monday', 'Tuesday', etc. (auto-derived on save)
+  final DateTime date;
   final TimeOfDay startTime;
   final TimeOfDay endTime;
-  final int maxStudents; // Max students per slot
+  final int maxStudents;
   final bool isAvailable;
-  final List<String> bookedStudents; // Student UIDs who booked this slot
+  final List<String> bookedStudents;
 
   Schedule({
     required this.id,
@@ -55,6 +55,28 @@ class Schedule {
   bool get isFull => bookedStudents.length >= maxStudents;
 
   String get timeRange => '${_formatTime(startTime)} - ${_formatTime(endTime)}';
+
+  // ✅ Auto-derive day of week from date (always accurate)
+  String get dayName {
+    const days = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    return days[date.weekday - 1]; // weekday: 1=Mon, 7=Sun
+  }
+
+  // ✅ Check if this schedule is in the past
+  bool get isPast {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final scheduleDay = DateTime(date.year, date.month, date.day);
+    return scheduleDay.isBefore(today);
+  }
 
   String _formatTime(TimeOfDay time) {
     final hour = time.hour > 12 ? time.hour - 12 : time.hour;

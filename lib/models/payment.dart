@@ -2,13 +2,14 @@ class Payment {
   final String id;
   final String studentId;
   final double amount;
-  final String type; // 'tuition' or 'document'
-  final String? documentTypeId; // only if type == 'document'
-  final String? documentName; // optional - for display
-  final String status; // 'pending' or 'confirmed'
+  final String type;
+  final String? documentTypeId;
+  final String? documentName;
+  final String status;
   final String? confirmedBy;
   final DateTime? confirmedAt;
   final String ticketId;
+  final DateTime createdAt;   // ✅ NEW
 
   Payment({
     required this.id,
@@ -21,7 +22,8 @@ class Payment {
     this.confirmedBy,
     this.confirmedAt,
     required this.ticketId,
-  });
+    DateTime? createdAt,     // ✅ optional in constructor
+  }) : createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() => {
         'studentId': studentId,
@@ -33,6 +35,7 @@ class Payment {
         'confirmedBy': confirmedBy,
         'confirmedAt': confirmedAt?.toIso8601String(),
         'ticketId': ticketId,
+        'createdAt': createdAt.toIso8601String(),   // ✅ saved now
       };
 
   factory Payment.fromMap(String id, Map<String, dynamic> map) => Payment(
@@ -48,5 +51,8 @@ class Payment {
             ? DateTime.parse(map['confirmedAt'])
             : null,
         ticketId: map['ticketId'] ?? '',
+        createdAt: map['createdAt'] != null
+            ? DateTime.parse(map['createdAt'])
+            : DateTime.now(),
       );
 }

@@ -18,11 +18,14 @@ class RequestServiceScreen extends StatefulWidget {
 
 class _RequestServiceScreenState extends State<RequestServiceScreen> {
   final FirestoreService _fs = FirestoreService();
-  
+
   // Multi-select state
   bool _includeTuition = false;
   Set<String> _selectedDocumentIds = {};
-  
+
+  // ✅ Documents student already has pending — cannot rebook
+  Set<String> _pendingDocumentIds = {};
+
   DateTime? _selectedSlot;
   List<DocumentType> _documentTypes = [];
   bool _loading = true;
@@ -31,6 +34,13 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
   void initState() {
     super.initState();
     _loadData();
+    // Load pending documents after the first frame (auth is ready by then)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      if (auth.currentUser != null) {
+        _loadPendingDocuments(auth.currentUser!.uid);
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -41,10 +51,20 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
     });
   }
 
+  Future<void> _loadPendingDocuments(String studentId) async {
+    final pending = await _fs.getPendingDocumentIdsForStudent(studentId);
+    if (!mounted) return;
+    setState(() {
+      _pendingDocumentIds = pending;
+      // ✅ Remove any pending docs from selection (defense in depth)
+      _selectedDocumentIds.removeAll(pending);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Request Service'),
@@ -58,7 +78,7 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Tuition Toggle (No fee)
+                  // Tuition toggle
                   Card(
                     child: SwitchListTile(
                       title: const Text(
@@ -73,45 +93,105 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
                       activeColor: Colors.blue,
                     ),
                   ),
-                  
+
                   const SizedBox(height: 12),
-                  
-                  // Documents Section
+
+                  // Pending notice
+                  if (_pendingDocumentIds.isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        border: Border.all(color: Colors.orange.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              color: Colors.orange.shade700, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'You have ${_pendingDocumentIds.length} '
+                              'pending document request(s). ',
+                              style: TextStyle(
+                                color: Colors.orange.shade800,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Documents section
                   const Text(
                     'Select Documents',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  
+
                   Expanded(
                     child: _documentTypes.isEmpty
-                        ? const Center(
-                            child: Text('No document types available.'),
-                          )
+                        ? const Center(child: Text('No document types available.'))
                         : ListView.builder(
                             itemCount: _documentTypes.length,
                             itemBuilder: (ctx, i) {
                               final doc = _documentTypes[i];
                               final isSelected = _selectedDocumentIds.contains(doc.id);
-                              
+                              final isPending = _pendingDocumentIds.contains(doc.id);
+
                               return Card(
                                 margin: const EdgeInsets.symmetric(vertical: 4),
+                                color: isPending ? Colors.grey.shade100 : null,
                                 child: CheckboxListTile(
-                                  title: Text(doc.name),
+                                  title: Row(
+                                    children: [
+                                      Expanded(child: Text(doc.name)),
+                                      if (isPending)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.orange.shade100,
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: Text(
+                                            'Pending',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.orange.shade900,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                   subtitle: Text('₱${doc.price.toStringAsFixed(2)}'),
                                   value: isSelected,
-                                  onChanged: (checked) {
-                                    setState(() {
-                                      if (checked == true) {
-                                        _selectedDocumentIds.add(doc.id);
-                                      } else {
-                                        _selectedDocumentIds.remove(doc.id);
-                                      }
-                                    });
-                                  },
+                                  // ✅ Disable checkbox when pending
+                                  onChanged: isPending
+                                      ? null
+                                      : (checked) {
+                                          setState(() {
+                                            if (checked == true) {
+                                              _selectedDocumentIds.add(doc.id);
+                                            } else {
+                                              _selectedDocumentIds.remove(doc.id);
+                                            }
+                                          });
+                                        },
                                   secondary: Icon(
-                                    isSelected ? Icons.check_circle : Icons.circle_outlined,
-                                    color: isSelected ? Colors.blue : Colors.grey,
+                                    isPending
+                                        ? Icons.hourglass_top
+                                        : (isSelected
+                                            ? Icons.check_circle
+                                            : Icons.circle_outlined),
+                                    color: isPending
+                                        ? Colors.orange
+                                        : (isSelected ? Colors.blue : Colors.grey),
                                   ),
                                   checkboxShape: const CircleBorder(),
                                 ),
@@ -119,15 +199,15 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
                             },
                           ),
                   ),
-                  
+
                   const Divider(),
-                  
-                  // Summary - Tuition NOT counted in total
+
+                  // Summary
                   _buildSummary(),
-                  
+
                   const SizedBox(height: 12),
-                  
-                  // Time Slot
+
+                  // Time slot
                   Row(
                     children: [
                       Expanded(
@@ -135,8 +215,8 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
                           onPressed: () => _selectSlot(context),
                           icon: const Icon(Icons.calendar_today),
                           label: Text(
-                            _selectedSlot == null 
-                                ? 'Select Time Slot' 
+                            _selectedSlot == null
+                                ? 'Select Time Slot'
                                 : 'Slot: ${_formatTime(_selectedSlot!)}',
                           ),
                           style: ElevatedButton.styleFrom(
@@ -147,24 +227,26 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
                       ),
                     ],
                   ),
-                  
+
                   const SizedBox(height: 12),
-                  
-                  // Submit Button
+
+                  // Submit
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _hasSelection() ? () => _submitRequest(auth.currentUser!.uid) : null,
+                      onPressed: _hasSelection()
+                          ? () => _submitRequest(auth.currentUser!.uid)
+                          : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                       child: Text(
-                      _hasSelection() 
-                          ? 'Book Slot ${_getTotalText()}'  // ✅ QR removed
-                          : 'Select at least one service',
-                    ),
+                        _hasSelection()
+                            ? 'Book Slot ${_getTotalText()}'
+                            : 'Select at least one service',
+                      ),
                     ),
                   ),
                 ],
@@ -176,7 +258,7 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
   Widget _buildSummary() {
     final itemCount = _getItemCount();
     final documentTotal = _calculateDocumentTotal();
-    
+
     if (itemCount == 0) {
       return Container(
         padding: const EdgeInsets.all(12),
@@ -190,15 +272,14 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
         ),
       );
     }
-    
-    // Build list of selected items
+
     final items = <String>[];
     if (_includeTuition) items.add('Tuition (Free)');
     for (var id in _selectedDocumentIds) {
       final doc = _documentTypes.firstWhere((d) => d.id == id);
       items.add('${doc.name} (₱${doc.price.toStringAsFixed(2)})');
     }
-    
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -215,12 +296,12 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
           ),
           const SizedBox(height: 4),
           ...items.map((item) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text(
-              '• $item',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-            ),
-          )).toList(),
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text(
+                  '• $item',
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                ),
+              )).toList(),
           const SizedBox(height: 8),
           if (documentTotal > 0)
             Text(
@@ -245,7 +326,6 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
     return _includeTuition || _selectedDocumentIds.isNotEmpty;
   }
 
-  // ✅ Calculate ONLY document total (tuition is free)
   double _calculateDocumentTotal() {
     double total = 0.0;
     for (var id in _selectedDocumentIds) {
@@ -279,23 +359,42 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
         barrierDismissible: false,
         builder: (ctx) => const Center(child: CircularProgressIndicator()),
       );
-      
+
       final schedules = await _fs.getSchedules();
       Navigator.pop(context);
-      
-      final availableSchedules = schedules.where((s) => 
-        s.isAvailable && !s.isFull
-      ).toList();
-      
+
+      // ✅ Filter: available, not full, NOT PAST DATE
+      final availableSchedules = schedules.where((s) {
+        if (!s.isAvailable || s.isFull) return false;
+        if (s.isPast) return false; // ← past dates are excluded
+
+        // Optional: also filter today's slots whose start time has passed
+        final now = DateTime.now();
+        final scheduleStart = DateTime(
+          s.date.year,
+          s.date.month,
+          s.date.day,
+          s.startTime.hour,
+          s.startTime.minute,
+        );
+        // Allow a 30-min grace window (in case student is booking right at slot start)
+        if (scheduleStart.add(const Duration(minutes: 30)).isBefore(now)) {
+          return false;
+        }
+        return true;
+      }).toList();
+
       if (availableSchedules.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No available time slots.')),
+            const SnackBar(
+              content: Text('No available time slots. Please check back later.'),
+            ),
           );
         }
         return;
       }
-      
+
       final selected = await showDialog<Schedule>(
         context: context,
         builder: (_) => AlertDialog(
@@ -308,7 +407,8 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
               itemBuilder: (ctx, i) {
                 final schedule = availableSchedules[i];
                 return ListTile(
-                  title: Text('${_formatDate(schedule.date)} - ${schedule.timeRange}'),
+                  title: Text(
+                      '${_formatDate(schedule.date)} - ${schedule.timeRange}'),
                   subtitle: Text(
                     '${schedule.bookedStudents.length}/${schedule.maxStudents} booked',
                   ),
@@ -325,7 +425,7 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
           ],
         ),
       );
-      
+
       if (selected != null) {
         final selectedDateTime = DateTime(
           selected.date.year,
@@ -334,16 +434,17 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
           selected.startTime.hour,
           selected.startTime.minute,
         );
-        
+
         final auth = Provider.of<AuthProvider>(context, listen: false);
         await _fs.bookScheduleSlot(selected.id, auth.currentUser!.uid);
-        
+
         setState(() => _selectedSlot = selectedDateTime);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Slot booked for ${_formatDate(selected.date)} at ${selected.timeRange}'),
+              content: Text(
+                  'Slot booked for ${_formatDate(selected.date)} at ${selected.timeRange}'),
             ),
           );
         }
@@ -359,131 +460,142 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
     }
   }
 
-void _submitRequest(String studentId) async {
-  if (!_hasSelection()) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Select at least one service')),
-    );
-    return;
-  }
-  
-  if (_selectedSlot == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Pick a time slot')),
-    );
-    return;
-  }
-
-  try {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
-    );
-
-    // ✅ GET THE USER HERE
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    final user = auth.currentUser!;
-
-    int count = await _fs.getTicketCountForSlot(_selectedSlot!);
-    int queueNumber = count + 1;
-
-    String ticketId = const Uuid().v4();
-    
-    // Build service items list
-    List<ServiceItem> serviceItems = [];
-    if (_includeTuition) {
-      serviceItems.add(ServiceItem(name: 'Tuition', type: 'tuition', amount: 0.0));
-    }
-    for (var docId in _selectedDocumentIds) {
-      final doc = _documentTypes.firstWhere((d) => d.id == docId);
-      serviceItems.add(ServiceItem(
-        name: doc.name,
-        type: 'document',
-        amount: doc.price,
-        documentTypeId: doc.id,
-      ));
-    }
-
-    // ✅ Now `user` is defined
-    QueueTicket ticket = QueueTicket(
-      id: ticketId,
-      studentId: studentId,
-      paymentId: '',
-      queueNumber: queueNumber,
-      status: 'waiting',
-      timeSlot: _selectedSlot!,
-      createdAt: DateTime.now(),
-      serviceItems: serviceItems,
-      studentNumber: user.studentNumber ?? 'N/A',
-      studentName: user.fullName,
-      yearLevel: user.yearLevel ?? 'N/A',
-    );
-    
-    await _fs.createQueueTicket(ticket);
-
-    List<String> paymentIds = [];
-    
-    // 1. Tuition - amount 0 (free)
-    if (_includeTuition) {
-      final payment = Payment(
-        id: '',
-        studentId: studentId,
-        amount: 0.0,
-        type: 'tuition',
-        documentTypeId: null,
-        documentName: 'Tuition',
-        status: 'pending',
-        ticketId: ticketId,
+  void _submitRequest(String studentId) async {
+    if (!_hasSelection()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select at least one service')),
       );
-      String paymentId = await _fs.createPayment(payment);
-      paymentIds.add(paymentId);
+      return;
     }
-    
-    // 2. Documents - with actual prices
-    for (var docId in _selectedDocumentIds) {
-      final doc = _documentTypes.firstWhere((d) => d.id == docId);
-      final payment = Payment(
-        id: '',
-        studentId: studentId,
-        amount: doc.price,
-        type: 'document',
-        documentTypeId: docId,
-        documentName: doc.name,
-        status: 'pending',
-        ticketId: ticketId,
+
+    if (_selectedSlot == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pick a time slot')),
       );
-      String paymentId = await _fs.createPayment(payment);
-      paymentIds.add(paymentId);
+      return;
     }
 
-    Navigator.pop(context);
-
-    print('✅ Ticket created:');
-    print('  - Ticket ID: $ticketId');
-    print('  - Queue #: $queueNumber');
-    print('  - Student: ${user.fullName} (${user.studentNumber})');
-    print('  - Payments: ${paymentIds.length}');
-
-    if (mounted) {
+    // ✅ Defense-in-depth: block if any selected document is already pending
+    final conflicting = _selectedDocumentIds.intersection(_pendingDocumentIds);
+    if (conflicting.isNotEmpty) {
+      final names = conflicting
+          .map((id) => _documentTypes.firstWhere((d) => d.id == id).name)
+          .join(', ');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Ticket #$queueNumber created! (${paymentIds.length} payment(s))'),
-          backgroundColor: Colors.green,
+          content: Text('❌ You already have a pending request for: $names'),
+          backgroundColor: Colors.red,
         ),
       );
-      Navigator.pop(context);
+      return;
     }
-  } catch (e) {
-    Navigator.pop(context);
-    print('❌ Error creating request: $e');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(child: CircularProgressIndicator()),
       );
+
+      int count = await _fs.getTicketCountForSlot(_selectedSlot!);
+      int queueNumber = count + 1;
+
+      String ticketId = const Uuid().v4();
+
+      List<ServiceItem> serviceItems = [];
+      if (_includeTuition) {
+        serviceItems.add(
+            ServiceItem(name: 'Tuition', type: 'tuition', amount: 0.0));
+      }
+      for (var docId in _selectedDocumentIds) {
+        final doc = _documentTypes.firstWhere((d) => d.id == docId);
+        serviceItems.add(ServiceItem(
+          name: doc.name,
+          type: 'document',
+          amount: doc.price,
+          documentTypeId: doc.id,
+        ));
+      }
+
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final user = auth.currentUser!;
+
+      QueueTicket ticket = QueueTicket(
+        id: ticketId,
+        studentId: studentId,
+        paymentId: '',
+        queueNumber: queueNumber,
+        status: 'waiting',
+        timeSlot: _selectedSlot!,
+        createdAt: DateTime.now(),
+        serviceItems: serviceItems,
+        studentNumber: user.studentNumber ?? 'N/A',
+        studentName: user.fullName,
+        yearLevel: user.yearLevel ?? 'N/A',
+      );
+
+      await _fs.createQueueTicket(ticket);
+
+      List<String> paymentIds = [];
+
+      if (_includeTuition) {
+        final payment = Payment(
+          id: '',
+          studentId: studentId,
+          amount: 0.0,
+          type: 'tuition',
+          documentTypeId: null,
+          documentName: 'Tuition',
+          status: 'pending',
+          ticketId: ticketId,
+        );
+        String paymentId = await _fs.createPayment(payment);
+        paymentIds.add(paymentId);
+      }
+
+      for (var docId in _selectedDocumentIds) {
+        final doc = _documentTypes.firstWhere((d) => d.id == docId);
+        final payment = Payment(
+          id: '',
+          studentId: studentId,
+          amount: doc.price,
+          type: 'document',
+          documentTypeId: docId,
+          documentName: doc.name,
+          status: 'pending',
+          ticketId: ticketId,
+        );
+        String paymentId = await _fs.createPayment(payment);
+        paymentIds.add(paymentId);
+      }
+
+      Navigator.pop(context);
+
+      print('✅ Ticket created:');
+      print('  - Ticket ID: $ticketId');
+      print('  - Queue #: $queueNumber');
+      print('  - Payments: ${paymentIds.length}');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Ticket #$queueNumber created! (${paymentIds.length} payment(s))'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      print('❌ Error creating request: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
-}
 
   String _formatDate(DateTime date) {
     return '${date.month}/${date.day}/${date.year}';

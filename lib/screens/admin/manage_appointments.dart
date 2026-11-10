@@ -23,8 +23,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Manage Appointments'),
-        backgroundColor: Colors.red.shade50,
-        foregroundColor: Colors.red.shade900,
+        foregroundColor: Colors.blue.shade900,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -45,7 +44,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      '⚠️ This will permanently delete ALL appointments for the selected date range. This action cannot be undone!',
+                      'This will permanently delete ALL appointments for the selected date range. This action cannot be undone!',
                       style: TextStyle(color: Colors.red.shade700),
                     ),
                   ),
@@ -307,7 +306,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: Colors.blueAccent,
               foregroundColor: Colors.white,
             ),
             child: const Text('Yes, Delete All'),

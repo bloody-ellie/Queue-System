@@ -173,7 +173,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                       ],
                     ),
                     Text(
-                      item.amount > 0 ? '₱${item.amount.toStringAsFixed(2)}' : 'Free',
+                      item.amount > 0 ? '₱${item.amount.toStringAsFixed(2)}' : '-',
                       style: TextStyle(
                         color: item.amount > 0 ? Colors.blue.shade700 : Colors.green,
                         fontWeight: FontWeight.w500,
@@ -188,7 +188,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             children: [
               const Text('Total', style: TextStyle(fontWeight: FontWeight.bold)),
               Text(
-                total > 0 ? '₱${total.toStringAsFixed(2)}' : 'Free',
+                total > 0 ? '₱${total.toStringAsFixed(2)}' : '-',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,

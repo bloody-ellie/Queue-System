@@ -5,6 +5,7 @@ import 'providers/auth_provider.dart';
 import 'providers/queue_provider.dart';
 import 'screens/login_screen.dart';
 import 'services/cleanup_service.dart';  // ✅ ADD THIS IMPORT
+import 'utils/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -107,12 +108,9 @@ class MyApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'Queue System',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          useMaterial3: true,
-        ),
-        home: const LoginScreen(),
         debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        home: const LoginScreen(),
       ),
     );
   }

@@ -327,7 +327,7 @@ class _ManageUsersState extends State<ManageUsers> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _createUser,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: Colors.blue.shade500,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
