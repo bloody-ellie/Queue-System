@@ -89,6 +89,41 @@ class CleanupService {
     }
   }
 
+  /// ✅ FIXED: Now inside the class
+  /// Automatically mark unserved tickets from past days as 'passed'
+  /// so they don't block students from booking new appointments.
+  Future<void> expireMissedTickets() async {
+    try {
+      final now = DateTime.now();
+      final startOfToday = DateTime(now.year, now.month, now.day);
+
+      // 1. Find all tickets that are still waiting or serving
+      final snapshot = await _firestore
+          .collection('queueTickets')
+          .where('status', whereIn: ['waiting', 'serving'])
+          .get();
+
+      int expiredCount = 0;
+
+      // 2. Check their dates. If before today, mark as passed.
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final timeSlot = DateTime.parse(data['timeSlot']);
+
+        if (timeSlot.isBefore(startOfToday)) {
+          await doc.reference.update({'status': 'passed'});
+          expiredCount++;
+        }
+      }
+
+      if (expiredCount > 0) {
+        print('✅ Auto-expired $expiredCount missed ticket(s) from previous days.');
+      }
+    } catch (e) {
+      print('❌ Error expiring missed tickets: $e');
+    }
+  }
+
   /// MAIN: Run daily cleanup (no report generation)
   Future<void> runDailyCleanup() async {
     print('🔄 Running daily cleanup check...');
@@ -128,3 +163,4 @@ class CleanupService {
     }
   }
 }
+// ✅ END OF CLASS

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ ADDED THIS IMPORT
 import '../../models/document_type.dart';
 import '../../models/payment.dart';
 import '../../models/queue_ticket.dart';
@@ -52,13 +53,39 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
   }
 
   Future<void> _loadPendingDocuments(String studentId) async {
-    final pending = await _fs.getPendingDocumentIdsForStudent(studentId);
-    if (!mounted) return;
-    setState(() {
-      _pendingDocumentIds = pending;
-      // ✅ Remove any pending docs from selection (defense in depth)
-      _selectedDocumentIds.removeAll(pending);
-    });
+    try {
+      final now = DateTime.now();
+      final startOfToday = DateTime(now.year, now.month, now.day);
+      
+      // 1. 🛠️ AUTO-EXPIRE: Find this student's stuck tickets from past days
+      final ticketsSnapshot = await FirebaseFirestore.instance
+          .collection('queueTickets')
+          .where('studentId', isEqualTo: studentId)
+          .where('status', whereIn: ['waiting', 'serving'])
+          .get();
+
+      for (var doc in ticketsSnapshot.docs) {
+        final data = doc.data();
+        final timeSlot = DateTime.parse(data['timeSlot']);
+        
+        // If the ticket is from yesterday or older, mark it as passed!
+        if (timeSlot.isBefore(startOfToday)) {
+          await doc.reference.update({'status': 'passed'});
+          print('✅ Auto-expired ticket ${doc.id} for student $studentId');
+        }
+      }
+
+      // 2. NOW fetch the pending documents (it will ignore the ones we just passed)
+      final pending = await _fs.getPendingDocumentIdsForStudent(studentId);
+      
+      if (!mounted) return;
+      setState(() {
+        _pendingDocumentIds = pending;
+        _selectedDocumentIds.removeAll(pending);
+      });
+    } catch (e) {
+      print('❌ Error loading pending documents: $e');
+    }
   }
 
   @override

@@ -34,6 +34,65 @@ class FirestoreService {
     await _firestore.collection('documentTypes').doc(id).update(data);
   }
 
+    // ---------- User Management ----------
+  
+  /// Fetch all users by role ('student' or 'cashier')
+  Future<List<AppUser>> getUsersByRole(String role) async {
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: role)
+          .get();
+
+      final users = snapshot.docs
+          .map((doc) => AppUser.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+          .toList();
+
+      // Sort alphabetically by name
+      users.sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+      return users;
+    } catch (e) {
+      print('❌ Error getting users by role: $e');
+      return [];
+    }
+  }
+
+  /// Update a student's editable fields (Student ID is intentionally omitted)
+  Future<bool> updateStudentInfo({
+    required String uid,
+    required String firstName,
+    required String lastName,
+    required String middleInitial,
+    required String yearLevel,
+  }) async {
+    try {
+      final newFullName = '$lastName, $firstName${middleInitial.isNotEmpty ? ' $middleInitial.' : ''}';
+      
+      await _firestore.collection('users').doc(uid).update({
+        'firstName': firstName,
+        'lastName': lastName,
+        'middleInitial': middleInitial,
+        'yearLevel': yearLevel,
+        'name': newFullName,
+      });
+      return true;
+    } catch (e) {
+      print('❌ Error updating student: $e');
+      return false;
+    }
+  }
+
+  /// Delete a user document from Firestore
+  Future<bool> deleteUser(String uid) async {
+    try {
+      await _firestore.collection('users').doc(uid).delete();
+      return true;
+    } catch (e) {
+      print('❌ Error deleting user: $e');
+      return false;
+    }
+  }
+
   // ---------- Payments ----------
   Future<String> createPayment(Payment payment) async {
     DocumentReference ref =
@@ -273,84 +332,6 @@ Future<Set<String>> getPendingDocumentIdsForStudent(String studentId) async {
     } catch (e) {
       print('❌ Error searching tickets: $e');
       return [];
-    }
-  }
-
-  // ---------- User Management ----------
-  Future<List<AppUser>> getUsersByRole(String role) async {
-    try {
-      final snapshot = await _firestore
-          .collection('users')
-          .where('role', isEqualTo: role)
-          .get();
-
-      final users = snapshot.docs
-          .map((doc) =>
-              AppUser.fromMap(doc.id, doc.data() as Map<String, dynamic>))
-          .toList();
-
-      users.sort((a, b) =>
-          a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
-      return users;
-    } catch (e) {
-      print('❌ Error getting users by role: $e');
-      return [];
-    }
-  }
-
-  Future<bool> updateStudentInfo(
-    String uid, {
-    String? firstName,
-    String? lastName,
-    String? middleInitial,
-    String? yearLevel,
-    String? course,
-  }) async {
-    try {
-      final updates = <String, dynamic>{};
-      if (firstName != null) updates['firstName'] = firstName;
-      if (lastName != null) updates['lastName'] = lastName;
-      if (middleInitial != null) updates['middleInitial'] = middleInitial;
-      if (yearLevel != null) updates['yearLevel'] = yearLevel;
-      if (course != null) updates['course'] = course;
-
-      if (firstName != null || lastName != null || middleInitial != null) {
-        final doc = await _firestore.collection('users').doc(uid).get();
-        final data = doc.data();
-        final fName = firstName ?? data?['firstName'] ?? '';
-        final lName = lastName ?? data?['lastName'] ?? '';
-        final mi = middleInitial ?? data?['middleInitial'] ?? '';
-        updates['name'] = '$lName, $fName${mi.isNotEmpty ? ' $mi.' : ''}';
-      }
-
-      await _firestore.collection('users').doc(uid).update(updates);
-      return true;
-    } catch (e) {
-      print('❌ Error updating student info: $e');
-      return false;
-    }
-  }
-
-  Future<bool> deleteUserDocument(String uid) async {
-    try {
-      await _firestore.collection('users').doc(uid).delete();
-      return true;
-    } catch (e) {
-      print('❌ Error deleting user: $e');
-      return false;
-    }
-  }
-
-  Future<AppUser?> getUserById(String uid) async {
-    try {
-      final doc = await _firestore.collection('users').doc(uid).get();
-      if (doc.exists) {
-        return AppUser.fromMap(doc.id, doc.data() as Map<String, dynamic>);
-      }
-      return null;
-    } catch (e) {
-      print('❌ Error getting user: $e');
-      return null;
     }
   }
 

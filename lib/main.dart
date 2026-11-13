@@ -25,12 +25,7 @@ void main() async {
     );
     print('✅ Firebase initialized successfully!');
     print('📦 Project: queue-system-67874');
-    
-    // ✅ Run daily cleanup check
-    final cleanupService = CleanupService();
-    await cleanupService.runDailyCleanup();
-    
-  } catch (e) {
+     } catch (e) {
     print('❌ Firebase initialization error: $e');
     runApp(ErrorApp(error: e.toString()));
     return;

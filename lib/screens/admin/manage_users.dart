@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
+import '../../models/user.dart';
+import '../../services/firestore_service.dart';
+import 'create_user_screen.dart';
+import 'edit_user_screen.dart';
 
 class ManageUsers extends StatefulWidget {
   const ManageUsers({super.key});
@@ -10,369 +12,202 @@ class ManageUsers extends StatefulWidget {
 }
 
 class _ManageUsersState extends State<ManageUsers> {
-  final _formKey = GlobalKey<FormState>();
-  
-  final _emailCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
-  final _studentNumberCtrl = TextEditingController();
-  final _firstNameCtrl = TextEditingController();
-  final _lastNameCtrl = TextEditingController();
-  final _middleInitialCtrl = TextEditingController();
-  
-  String _role = 'student';
-  String _yearLevel = '1st Year';
-  bool _isLoading = false;
-  
-  final List<String> _yearLevels = [
-    '1st Year',
-    '2nd Year',
-    '3rd Year',
-    '4th Year',
-    '5th Year',
-  ];
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Manage Users'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.person_add),
+              tooltip: 'Create New User',
+              onPressed: () async {
+                final created = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CreateUserScreen()),
+                );
+                if (created == true) setState(() {}); // Refresh if created
+              },
+            ),
+          ],
+          bottom: const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.school), text: 'Students'),
+              Tab(icon: Icon(Icons.point_of_sale), text: 'Cashiers'),
+            ],
+          ),
+        ),
+        body: const TabBarView(
+          children: [
+            _UserList(role: 'student'),
+            _UserList(role: 'cashier'),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () async {
+             final created = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CreateUserScreen()),
+                );
+             if (created == true) setState(() {});
+          },
+          child: const Icon(Icons.add),
+        ),
+      ),
+    );
+  }
+}
+
+class _UserList extends StatefulWidget {
+  final String role; // 'student' or 'cashier'
+  const _UserList({required this.role});
 
   @override
-  void dispose() {
-    _emailCtrl.dispose();
-    _passCtrl.dispose();
-    _nameCtrl.dispose();
-    _studentNumberCtrl.dispose();
-    _firstNameCtrl.dispose();
-    _lastNameCtrl.dispose();
-    _middleInitialCtrl.dispose();
-    super.dispose();
+  State<_UserList> createState() => _UserListState();
+}
+
+class _UserListState extends State<_UserList> {
+  final FirestoreService _fs = FirestoreService();
+  final TextEditingController _searchCtrl = TextEditingController();
+  
+  List<AppUser> _allUsers = [];
+  List<AppUser> _filtered = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsers();
   }
 
-  Future<void> _createUser() async {
-    // Validate form
-    if (!_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill all required fields'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
+  Future<void> _loadUsers() async {
     setState(() => _isLoading = true);
+    final users = await _fs.getUsersByRole(widget.role);
+    setState(() {
+      _allUsers = users;
+      _filtered = users;
+      _isLoading = false;
+    });
+  }
 
-    final auth = Provider.of<AuthProvider>(context, listen: false);
+  void _onSearch(String query) {
+    final q = query.toLowerCase().trim();
+    setState(() {
+      if (q.isEmpty) {
+        _filtered = _allUsers;
+      } else {
+        _filtered = _allUsers.where((u) {
+          // Search by name, email, or (if student) student number
+          final matchesName = u.fullName.toLowerCase().contains(q);
+          final matchesEmail = u.email.toLowerCase().contains(q);
+          final matchesId = widget.role == 'student' && (u.studentNumber ?? '').toLowerCase().contains(q);
+          return matchesName || matchesEmail || matchesId;
+        }).toList();
+      }
+    });
+  }
 
-    // Build full name
-    String fullName = _role == 'student'
-        ? '${_lastNameCtrl.text.trim()}, ${_firstNameCtrl.text.trim()}'
-            '${_middleInitialCtrl.text.isNotEmpty ? ' ${_middleInitialCtrl.text.trim()}.' : ''}'
-        : _nameCtrl.text.trim();
-
-    bool success = await auth.createUser(
-      email: _emailCtrl.text.trim(),
-      password: _passCtrl.text,
-      name: fullName,
-      role: _role,
-      studentNumber: _role == 'student' ? _studentNumberCtrl.text.trim() : null,
-      firstName: _role == 'student' ? _firstNameCtrl.text.trim() : null,
-      lastName: _role == 'student' ? _lastNameCtrl.text.trim() : null,
-      middleInitial: _role == 'student' ? _middleInitialCtrl.text.trim() : null,
-      yearLevel: _role == 'student' ? _yearLevel : null,
+  Future<void> _deleteUser(AppUser user) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Delete ${widget.role == 'student' ? 'Student' : 'Cashier'}?'),
+        content: Text('Are you sure you want to permanently delete ${user.fullName}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
 
-    setState(() => _isLoading = false);
-
-    if (success) {
+    if (confirm == true) {
+      await _fs.deleteUser(user.uid);
+      _loadUsers();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ User created successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        // Clear form
-        _emailCtrl.clear();
-        _passCtrl.clear();
-        _nameCtrl.clear();
-        _studentNumberCtrl.clear();
-        _firstNameCtrl.clear();
-        _lastNameCtrl.clear();
-        _middleInitialCtrl.clear();
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ Creation failed. Email may already be in use.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User deleted.')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Manage Users')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ---------- Common Fields ----------
-              const Text(
-                'Account Information',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: _emailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Email is required';
-                  }
-                  if (!value.contains('@') || !value.contains('.')) {
-                    return 'Enter a valid email';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: _passCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password * (min 6 characters)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Password is required';
-                  }
-                  if (value.length < 6) {
-                    return 'Password must be at least 6 characters';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // Role selector
-              Row(
-                children: [
-                  const Text('Role: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _role,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                      items: ['student', 'cashier']
-                          .map((r) => DropdownMenuItem(
-                                value: r,
-                                child: Text(r.toUpperCase()),
-                              ))
-                          .toList(),
-                      onChanged: (v) {
-                        setState(() {
-                          _role = v!;
-                          // Reset form validation when switching roles
-                          _formKey.currentState?.reset();
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ),
-
-              const Divider(height: 32),
-
-              // ---------- Student-Specific Fields ----------
-              if (_role == 'student') ...[
-                const Text(
-                  'Student Information',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-
-                // ✅ Student Number (REQUIRED)
-                TextFormField(
-                  controller: _studentNumberCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Student Number *',
-                    hintText: 'e.g., 2023-00123',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.badge),
-                  ),
-                  validator: (value) {
-                    if (_role != 'student') return null;
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Student number is required';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-
-                // ✅ First Name (REQUIRED)
-                TextFormField(
-                  controller: _firstNameCtrl,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'First Name *',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
-                  ),
-                  validator: (value) {
-                    if (_role != 'student') return null;
-                    if (value == null || value.trim().isEmpty) {
-                      return 'First name is required';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-
-                // ✅ Last Name (REQUIRED)
-                TextFormField(
-                  controller: _lastNameCtrl,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Last Name *',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                  validator: (value) {
-                    if (_role != 'student') return null;
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Last name is required';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-
-                // Middle Initial (optional)
-                TextFormField(
-                  controller: _middleInitialCtrl,
-                  maxLength: 1,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    labelText: 'Middle Initial (optional)',
-                    hintText: 'e.g., D',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.abc),
-                    counterText: '',
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Year Level
-                DropdownButtonFormField<String>(
-                  value: _yearLevel,
-                  decoration: const InputDecoration(
-                    labelText: 'Year Level',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.school),
-                  ),
-                  items: _yearLevels
-                      .map((y) => DropdownMenuItem(value: y, child: Text(y)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _yearLevel = v!),
-                ),
-              ],
-
-              // ---------- Cashier Name (for cashier role) ----------
-              if (_role == 'cashier') ...[
-                const Text(
-                  'Cashier Information',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _nameCtrl,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Full Name *',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
-                  ),
-                  validator: (value) {
-                    if (_role != 'cashier') return null;
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Name is required';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-
-              const SizedBox(height: 24),
-
-              // Submit Button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _createUser,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade900,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Create User',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Info note
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Fields marked with * are required.',
-                        style: TextStyle(color: Colors.blue.shade700, fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: TextField(
+            controller: _searchCtrl,
+            onChanged: _onSearch,
+            decoration: InputDecoration(
+              hintText: 'Search by name, email, or ID...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              filled: true,
+              fillColor: Colors.white,
+            ),
           ),
         ),
-      ),
+        
+        if (_isLoading)
+          const Expanded(child: Center(child: CircularProgressIndicator()))
+        else if (_filtered.isEmpty)
+          const Expanded(child: Center(child: Text('No users found.')))
+        else
+          Expanded(
+            child: ListView.builder(
+              itemCount: _filtered.length,
+              itemBuilder: (ctx, i) {
+                final user = _filtered[i];
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: widget.role == 'student' ? Colors.blue.shade100 : Colors.orange.shade100,
+                      child: Icon(widget.role == 'student' ? Icons.school : Icons.point_of_sale),
+                    ),
+                    title: Text(user.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(user.email),
+                        if (widget.role == 'student')
+                          Text('ID: ${user.studentNumber ?? 'N/A'} • ${user.yearLevel ?? 'N/A'}', style: TextStyle(color: Colors.blue.shade700, fontSize: 12)),
+                      ],
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Edit is only for students
+                        if (widget.role == 'student')
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.blue),
+                            onPressed: () async {
+                              final updated = await Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => EditUserScreen(student: user)),
+                              );
+                              if (updated == true) _loadUsers();
+                            },
+                          ),
+                        // Delete is for both
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _deleteUser(user),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 }
