@@ -74,7 +74,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _yearLevel,
+                initialValue: _yearLevel,
                 decoration: const InputDecoration(labelText: 'Year Level', border: OutlineInputBorder()),
                 items: _yearLevels.map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
                 onChanged: (v) => setState(() => _yearLevel = v!),

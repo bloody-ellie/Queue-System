@@ -24,6 +24,23 @@ Future<void> bulkCreateSchedules(List<Schedule> schedules) async {
       rethrow;
     }
   }
+
+    /// Check if a student number already exists in the database
+  Future<bool> isStudentNumberTaken(String studentNumber) async {
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .where('studentNumber', isEqualTo: studentNumber.trim())
+          .get();
+      
+      // If the snapshot has documents, the student number is taken
+      return snapshot.docs.isNotEmpty;
+    } catch (e) {
+      print('❌ Error checking student number: $e');
+      return false; 
+    }
+  }
+  
   // ---------- Documents (catalog) ----------
   Future<List<DocumentType>> getDocumentTypes() async {
     QuerySnapshot snapshot = await _firestore.collection('documentTypes').get();
@@ -190,27 +207,27 @@ Future<void> bulkCreateSchedules(List<Schedule> schedules) async {
     final stopwatch = Stopwatch()..start();
     print('⏱️ getSchedules() started...');
 
-    try {
-      final snapshot = await _firestore.collection('schedules').get();
+      try {
+        final snapshot = await _firestore.collection('schedules').get();
 
-      stopwatch.stop();
-      print('⏱️ getSchedules() found ${snapshot.docs.length} schedules '
-          'in ${stopwatch.elapsedMilliseconds}ms');
+        stopwatch.stop();
+        print('⏱️ getSchedules() found ${snapshot.docs.length} schedules '
+            'in ${stopwatch.elapsedMilliseconds}ms');
 
-      if (snapshot.docs.isEmpty) return [];
+        if (snapshot.docs.isEmpty) return [];
 
-      final schedules = snapshot.docs
-          .map((doc) =>
-              Schedule.fromMap(doc.id, doc.data()))
-          .toList();
+        final schedules = snapshot.docs
+            .map((doc) =>
+                Schedule.fromMap(doc.id, doc.data()))
+            .toList();
 
-      schedules.sort((a, b) => a.date.compareTo(b.date));
-      return schedules;
-    } catch (e) {
-      stopwatch.stop();
-      print(
-          '⏱️ getSchedules() ERROR after ${stopwatch.elapsedMilliseconds}ms: $e');
-      return [];
+        schedules.sort((a, b) => a.date.compareTo(b.date));
+        return schedules;
+      } catch (e) {
+        stopwatch.stop();
+        print(
+            '⏱️ getSchedules() ERROR after ${stopwatch.elapsedMilliseconds}ms: $e');
+        return [];
     }
   }
 

@@ -17,6 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text('Queue System Login')),
+      appBar: AppBar(title: const Text('Queue System Login')),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Form(
@@ -39,22 +40,35 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               TextFormField(
                 controller: _emailController,
-                decoration: InputDecoration(labelText: 'Email'),
+                decoration: const InputDecoration(labelText: 'Email'),
                 validator: (v) => v!.contains('@') ? null : 'Invalid email',
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _passwordController,
-                obscureText: true,
-                decoration: InputDecoration(labelText: 'Password'),
+                obscureText: _obscurePassword, 
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      color: Colors.grey,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
+                ),
                 validator: (v) => v!.length >= 6 ? null : 'Min 6 chars',
               ),
-              SizedBox(height: 24),
+              const SizedBox(height: 12),
               _isLoading
-                  ? CircularProgressIndicator()
+                  ? const CircularProgressIndicator()
                   : ElevatedButton(
                       onPressed: _login,
-                      child: Text('Sign In'),
+                      child: const Text('Sign In'),
                     ),
             ],
           ),
@@ -75,9 +89,11 @@ class _LoginScreenState extends State<LoginScreen> {
     if (success) {
       _navigateToRole(auth.currentUser!.role);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login failed. Check credentials.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Login failed. Check credentials.')),
+        );
+      }
     }
   }
 
@@ -85,16 +101,16 @@ class _LoginScreenState extends State<LoginScreen> {
     Widget screen;
     switch (role) {
       case 'admin':
-        screen = AdminDashboard();
+        screen = const AdminDashboard();
         break;
       case 'cashier':
-        screen = CashierDashboard();
+        screen = const CashierDashboard();
         break;
       case 'student':
-        screen = StudentDashboard();
+        screen = const StudentDashboard();
         break;
       default:
-        screen = LoginScreen();
+        screen = const LoginScreen();
     }
     Navigator.pushReplacement(
         context, MaterialPageRoute(builder: (_) => screen));

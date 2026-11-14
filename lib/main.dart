@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/queue_provider.dart';
 import 'screens/login_screen.dart';
-import 'services/cleanup_service.dart';  // ✅ ADD THIS IMPORT
+// ✅ ADD THIS IMPORT
 import 'utils/app_theme.dart';
 
 void main() async {

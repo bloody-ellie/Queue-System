@@ -18,7 +18,13 @@ class _ManageUsersState extends State<ManageUsers> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Manage Users'),
+          title: const Text(
+            'Manage Users',
+            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.white,
+          iconTheme: const IconThemeData(color: Colors.black),
+          elevation: 1,
           actions: [
             IconButton(
               icon: const Icon(Icons.person_add),
@@ -28,15 +34,30 @@ class _ManageUsersState extends State<ManageUsers> {
                   context,
                   MaterialPageRoute(builder: (_) => const CreateUserScreen()),
                 );
-                if (created == true) setState(() {}); // Refresh if created
+                if (created == true) setState(() {});
               },
             ),
           ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(icon: Icon(Icons.school), text: 'Students'),
-              Tab(icon: Icon(Icons.point_of_sale), text: 'Cashiers'),
-            ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(60),
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.only(bottom: 8),
+              child: TabBar(
+                indicator: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelColor: Colors.blue.shade800,
+                unselectedLabelColor: Colors.grey.shade600,
+                dividerColor: Colors.transparent,
+                tabs: const [
+                  Tab(icon: Icon(Icons.school), text: 'Students'),
+                  Tab(icon: Icon(Icons.point_of_sale), text: 'Cashiers'),
+                ],
+              ),
+            ),
           ),
         ),
         body: const TabBarView(
@@ -46,12 +67,14 @@ class _ManageUsersState extends State<ManageUsers> {
           ],
         ),
         floatingActionButton: FloatingActionButton(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
           onPressed: () async {
-             final created = await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CreateUserScreen()),
-                );
-             if (created == true) setState(() {});
+            final created = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CreateUserScreen()),
+            );
+            if (created == true) setState(() {});
           },
           child: const Icon(Icons.add),
         ),
@@ -60,6 +83,7 @@ class _ManageUsersState extends State<ManageUsers> {
   }
 }
 
+// ✅ The _UserList class is now inside this same file, below ManageUsers
 class _UserList extends StatefulWidget {
   final String role; // 'student' or 'cashier'
   const _UserList({required this.role});
@@ -71,7 +95,7 @@ class _UserList extends StatefulWidget {
 class _UserListState extends State<_UserList> {
   final FirestoreService _fs = FirestoreService();
   final TextEditingController _searchCtrl = TextEditingController();
-  
+
   List<AppUser> _allUsers = [];
   List<AppUser> _filtered = [];
   bool _isLoading = true;
@@ -99,10 +123,10 @@ class _UserListState extends State<_UserList> {
         _filtered = _allUsers;
       } else {
         _filtered = _allUsers.where((u) {
-          // Search by name, email, or (if student) student number
           final matchesName = u.fullName.toLowerCase().contains(q);
           final matchesEmail = u.email.toLowerCase().contains(q);
-          final matchesId = widget.role == 'student' && (u.studentNumber ?? '').toLowerCase().contains(q);
+          final matchesId = widget.role == 'student' &&
+              (u.studentNumber ?? '').toLowerCase().contains(q);
           return matchesName || matchesEmail || matchesId;
         }).toList();
       }
@@ -116,9 +140,12 @@ class _UserListState extends State<_UserList> {
         title: Text('Delete ${widget.role == 'student' ? 'Student' : 'Cashier'}?'),
         content: Text('Are you sure you want to permanently delete ${user.fullName}?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           TextButton(
-            onPressed: () => Navigator.pop(context, true), 
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),
           ),
@@ -130,7 +157,9 @@ class _UserListState extends State<_UserList> {
       await _fs.deleteUser(user.uid);
       _loadUsers();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User deleted.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('User deleted.')),
+        );
       }
     }
   }
@@ -147,7 +176,9 @@ class _UserListState extends State<_UserList> {
             decoration: InputDecoration(
               hintText: 'Search by name, email, or ID...',
               prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               filled: true,
               fillColor: Colors.white,
             ),
@@ -168,34 +199,52 @@ class _UserListState extends State<_UserList> {
                   margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: widget.role == 'student' ? Colors.blue.shade100 : Colors.orange.shade100,
-                      child: Icon(widget.role == 'student' ? Icons.school : Icons.point_of_sale),
+                      backgroundColor: widget.role == 'student'
+                          ? Colors.blue.shade100
+                          : Colors.orange.shade100,
+                      child: Icon(
+                        widget.role == 'student'
+                            ? Icons.school
+                            : Icons.point_of_sale,
+                        color: widget.role == 'student'
+                            ? Colors.blue.shade700
+                            : Colors.orange.shade700,
+                      ),
                     ),
-                    title: Text(user.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    title: Text(
+                      user.fullName,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(user.email),
                         if (widget.role == 'student')
-                          Text('ID: ${user.studentNumber ?? 'N/A'} • ${user.yearLevel ?? 'N/A'}', style: TextStyle(color: Colors.blue.shade700, fontSize: 12)),
+                          Text(
+                            'ID: ${user.studentNumber ?? 'N/A'} • ${user.yearLevel ?? 'N/A'}',
+                            style: TextStyle(
+                              color: Colors.blue.shade700,
+                              fontSize: 12,
+                            ),
+                          ),
                       ],
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Edit is only for students
                         if (widget.role == 'student')
                           IconButton(
                             icon: const Icon(Icons.edit, color: Colors.blue),
                             onPressed: () async {
                               final updated = await Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (_) => EditUserScreen(student: user)),
+                                MaterialPageRoute(
+                                  builder: (_) => EditUserScreen(student: user),
+                                ),
                               );
                               if (updated == true) _loadUsers();
                             },
                           ),
-                        // Delete is for both
                         IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () => _deleteUser(user),

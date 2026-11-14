@@ -70,7 +70,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
                     label: Text(
                       _startDate == null
                           ? 'From'
-                          : '${_formatDate(_startDate!)}',
+                          : _formatDate(_startDate!),
                     ),
                   ),
                 ),
@@ -82,7 +82,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
                     label: Text(
                       _endDate == null
                           ? 'To'
-                          : '${_formatDate(_endDate!)}',
+                          : _formatDate(_endDate!),
                     ),
                   ),
                 ),
@@ -166,13 +166,13 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
               // Ticket List
               Expanded(
                 child: _tickets.isEmpty
-                    ? Center(
+                    ? const Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.check_circle, size: 64, color: Colors.green),
-                            const SizedBox(height: 16),
-                            const Text(
+                            const Icon(Icons.check_circle, size: 64, color: Colors.green),
+                            SizedBox(height: 16),
+                            Text(
                               'No appointments found for this date range.',
                               style: TextStyle(fontSize: 16),
                             ),

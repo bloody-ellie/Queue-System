@@ -4,7 +4,7 @@ import '../services/firestore_service.dart';
 
 class QueueProvider extends ChangeNotifier {
   final FirestoreService _firestore = FirestoreService();
-  List<QueueTicket> _tickets = [];
+  final List<QueueTicket> _tickets = [];
   QueueTicket? _currentTicket;
 
   List<QueueTicket> get tickets => _tickets;

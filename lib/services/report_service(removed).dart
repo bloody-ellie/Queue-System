@@ -86,7 +86,7 @@ class ReportService {
           .get();
       
       return snapshot.docs
-          .map((doc) => DailyReport.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+          .map((doc) => DailyReport.fromMap(doc.id, doc.data()))
           .toList();
     } catch (e) {
       print('❌ Error getting reports: $e');
@@ -108,7 +108,7 @@ class ReportService {
           .get();
       
       return snapshot.docs
-          .map((doc) => DailyReport.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+          .map((doc) => DailyReport.fromMap(doc.id, doc.data()))
           .toList();
     } catch (e) {
       print('❌ Error getting reports: $e');
@@ -131,7 +131,7 @@ class ReportService {
           .get();
       
       return snapshot.docs
-          .map((doc) => QueueTicket.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+          .map((doc) => QueueTicket.fromMap(doc.id, doc.data()))
           .toList();
     } catch (e) {
       print('❌ Error getting served tickets: $e');
@@ -151,7 +151,7 @@ class ReportService {
           .get();
       
       return snapshot.docs
-          .map((doc) => Payment.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+          .map((doc) => Payment.fromMap(doc.id, doc.data()))
           .toList();
     } catch (e) {
       print('❌ Error getting payments: $e');
@@ -164,7 +164,7 @@ class ReportService {
       final snapshot = await _firestore.collection('documentTypes').get();
       final result = <String, String>{};
       for (var doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         result[doc.id] = data['name'] ?? 'Unknown';
       }
       return result;

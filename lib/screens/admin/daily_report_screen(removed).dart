@@ -85,7 +85,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                         leading: CircleAvatar(
                           backgroundColor: Colors.blue.shade100,
                           child: Text(
-                            '${_formatDate(report.reportDate)}',
+                            _formatDate(report.reportDate),
                             style: TextStyle(fontSize: 10, color: Colors.blue.shade900),
                           ),
                         ),
@@ -301,7 +301,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.1),  // ✅ Fixed
+      color: color.withValues(alpha: 0.1),  // ✅ Fixed
       borderRadius: BorderRadius.circular(8),
     ),
     child: Row(
@@ -311,7 +311,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
         Expanded(
           child: Text(
             label,
-            style: TextStyle(color: color.withOpacity(0.8)),  // ✅ Fixed
+            style: TextStyle(color: color.withValues(alpha: 0.8)),  // ✅ Fixed
           ),
         ),
         Text(

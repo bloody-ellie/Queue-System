@@ -28,7 +28,7 @@ class AppUser {
   String get fullName {
     if (firstName == null && lastName == null) return name;
     final mi = middleInitial != null && middleInitial!.isNotEmpty 
-        ? ' ${middleInitial}.' 
+        ? ' $middleInitial.' 
         : '';
     return '$lastName, $firstName$mi';
   }

@@ -60,7 +60,7 @@ class CleanupService {
           .get();
       
       return snapshot.docs
-          .map((doc) => QueueTicket.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+          .map((doc) => QueueTicket.fromMap(doc.id, doc.data()))
           .toList();
     } catch (e) {
       print('❌ Error getting tickets by date: $e');
@@ -81,7 +81,7 @@ class CleanupService {
           .get();
       
       return snapshot.docs
-          .map((doc) => Payment.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+          .map((doc) => Payment.fromMap(doc.id, doc.data()))
           .toList();
     } catch (e) {
       print('❌ Error getting payments by date: $e');

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/firestore_service.dart'; // ✅ Added this import
 
 class CreateUserScreen extends StatefulWidget {
   const CreateUserScreen({super.key});
@@ -11,6 +12,8 @@ class CreateUserScreen extends StatefulWidget {
 
 class _CreateUserScreenState extends State<CreateUserScreen> {
   final _formKey = GlobalKey<FormState>();
+  final FirestoreService _firestore = FirestoreService(); // ✅ Initialized the service here
+  
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
@@ -49,7 +52,7 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _role,
+                initialValue: _role,
                 decoration: const InputDecoration(labelText: 'Role', border: OutlineInputBorder()),
                 items: ['student', 'cashier'].map((r) => DropdownMenuItem(value: r, child: Text(r.toUpperCase()))).toList(),
                 onChanged: (v) => setState(() => _role = v!),
@@ -82,7 +85,7 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: _yearLevel,
+                  initialValue: _yearLevel,
                   decoration: const InputDecoration(labelText: 'Year Level', border: OutlineInputBorder()),
                   items: _yearLevels.map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
                   onChanged: (v) => setState(() => _yearLevel = v!),
@@ -119,12 +122,32 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
+    // ✅ 1. Check for Duplicate Student Number
+    if (_role == 'student') {
+      final studentNumber = _studentNumberCtrl.text.trim();
+      final isTaken = await _firestore.isStudentNumberTaken(studentNumber);
+      
+      if (isTaken) {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Student Number is already in use by another student.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return; // Stop the process
+      }
+    }
+
     final auth = Provider.of<AuthProvider>(context, listen: false);
     
     String fullName = _role == 'student'
         ? '${_lastNameCtrl.text}, ${_firstNameCtrl.text} ${_middleInitialCtrl.text.isNotEmpty ? '${_middleInitialCtrl.text}.' : ''}'
         : _nameCtrl.text;
 
+    // ✅ 2. Attempt to create user (Firebase handles duplicate emails automatically)
     bool success = await auth.createUser(
       email: _emailCtrl.text.trim(),
       password: _passCtrl.text,
@@ -139,10 +162,21 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
 
     setState(() => _isLoading = false);
 
-    if (success && mounted) {
-      Navigator.pop(context, true); // Return true to refresh list
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Creation failed. Email may be in use.'), backgroundColor: Colors.red));
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ User created successfully'), backgroundColor: Colors.green),
+        );
+        Navigator.pop(context, true); // Return true to refresh the list
+      } else {
+        // If success is false, it's highly likely the Email was already in use
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Creation failed. Email might already be in use.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

@@ -147,7 +147,7 @@ class StudentDashboard extends StatelessWidget {
             margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
             child: ListTile(
               leading: CircleAvatar(
-                backgroundColor: _statusColor(ticket.status).withOpacity(0.2),
+                backgroundColor: _statusColor(ticket.status).withValues(alpha: 0.2),
                 child: Text(
                   '${ticket.queueNumber}',
                   style: TextStyle(
