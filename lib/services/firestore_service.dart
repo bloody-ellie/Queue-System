@@ -8,6 +8,22 @@ import '../models/user.dart';
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+Future<void> bulkCreateSchedules(List<Schedule> schedules) async {
+    try {
+      final batch = _firestore.batch();
+      
+      for (var schedule in schedules) {
+        final docRef = _firestore.collection('schedules').doc();
+        batch.set(docRef, schedule.toMap());
+      }
+      
+      await batch.commit();
+      print('✅ Successfully bulk created ${schedules.length} schedules');
+    } catch (e) {
+      print('❌ Error bulk creating schedules: $e');
+      rethrow;
+    }
+  }
   // ---------- Documents (catalog) ----------
   Future<List<DocumentType>> getDocumentTypes() async {
     QuerySnapshot snapshot = await _firestore.collection('documentTypes').get();
@@ -45,7 +61,7 @@ class FirestoreService {
           .get();
 
       final users = snapshot.docs
-          .map((doc) => AppUser.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+          .map((doc) => AppUser.fromMap(doc.id, doc.data()))
           .toList();
 
       // Sort alphabetically by name
@@ -116,7 +132,7 @@ class FirestoreService {
           .get();
       return snapshot.docs
           .map((doc) =>
-              Payment.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+              Payment.fromMap(doc.id, doc.data()))
           .toList();
     } catch (e) {
       print('❌ Error getting payments for ticket: $e');
@@ -160,7 +176,7 @@ class FirestoreService {
   // ---------- Time slot availability ----------
   Future<int> getTicketCountForSlot(DateTime slot) async {
     DateTime start = DateTime(slot.year, slot.month, slot.day, slot.hour);
-    DateTime end = start.add(Duration(hours: 1));
+    DateTime end = start.add(const Duration(hours: 1));
     QuerySnapshot snapshot = await _firestore
         .collection('queueTickets')
         .where('timeSlot', isGreaterThanOrEqualTo: start.toIso8601String())
@@ -185,7 +201,7 @@ class FirestoreService {
 
       final schedules = snapshot.docs
           .map((doc) =>
-              Schedule.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+              Schedule.fromMap(doc.id, doc.data()))
           .toList();
 
       schedules.sort((a, b) => a.date.compareTo(b.date));
@@ -257,7 +273,7 @@ class FirestoreService {
       return snapshot.docs
           .map((doc) => QueueTicket.fromMap(
                 doc.id,
-                doc.data() as Map<String, dynamic>,
+                doc.data(),
               ))
           .where((ticket) {
         // Only tickets on today's date
@@ -283,7 +299,7 @@ Future<Set<String>> getPendingDocumentIdsForStudent(String studentId) async {
     final docIds = <String>{};
     for (var doc in snapshot.docs) {
       final ticket = QueueTicket.fromMap(
-          doc.id, doc.data() as Map<String, dynamic>);
+          doc.id, doc.data());
       for (var item in ticket.serviceItems) {
         if (item.type == 'document' && item.documentTypeId != null) {
           docIds.add(item.documentTypeId!);
@@ -315,7 +331,7 @@ Future<Set<String>> getPendingDocumentIdsForStudent(String studentId) async {
       return snapshot.docs
           .map((doc) => QueueTicket.fromMap(
                 doc.id,
-                doc.data() as Map<String, dynamic>,
+                doc.data(),
               ))
           .where((ticket) {
         // Skip if not scheduled for today
@@ -353,7 +369,7 @@ Future<Set<String>> getPendingDocumentIdsForStudent(String studentId) async {
       return snapshot.docs
           .map((doc) => QueueTicket.fromMap(
                 doc.id,
-                doc.data() as Map<String, dynamic>,
+                doc.data(),
               ))
           .toList();
     } catch (e) {
@@ -389,7 +405,7 @@ Future<Set<String>> getPendingDocumentIdsForStudent(String studentId) async {
 
       return snapshot.docs
           .map((doc) =>
-              Payment.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+              Payment.fromMap(doc.id, doc.data()))
           .toList();
     } catch (e) {
       print('❌ Error getting payments by date: $e');
