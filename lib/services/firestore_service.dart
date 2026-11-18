@@ -272,7 +272,21 @@ Future<void> bulkCreateSchedules(List<Schedule> schedules) async {
 
     return isAvailable && bookedCount < maxStudents;
   }
-
+  // ---------- Notifications ----------
+  /// Send a real-time notification to all students
+  Future<void> sendNotification(String title, String message) async {
+    try {
+      await _firestore.collection('notifications').add({
+        'title': title,
+        'message': message,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+      print('✅ Notification sent: $title');
+    } catch (e) {
+      print('❌ Error sending notification: $e');
+    }
+  }
+  
 // ---------- Cashier: Active Tickets (TODAY ONLY) ----------
   /// Returns tickets whose scheduled date is EXACTLY today.
   /// Excludes past dates (yesterday and older) AND future dates (tomorrow onwards).
@@ -280,23 +294,31 @@ Future<void> bulkCreateSchedules(List<Schedule> schedules) async {
     try {
       final snapshot = await _firestore
           .collection('queueTickets')
-          .where('status', whereIn: ['waiting', 'serving']).get();
+          .where('status', whereIn: ['waiting', 'serving'])
+          .get();
 
-      // ✅ Today's boundaries (midnight to 23:59:59)
       final now = DateTime.now();
       final startOfToday = DateTime(now.year, now.month, now.day, 0, 0, 0);
       final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
-      return snapshot.docs
+      final tickets = snapshot.docs
           .map((doc) => QueueTicket.fromMap(
                 doc.id,
-                doc.data(),
+                doc.data() as Map<String, dynamic>,
               ))
           .where((ticket) {
-        // Only tickets on today's date
-        return !ticket.timeSlot.isBefore(startOfToday) &&
-            !ticket.timeSlot.isAfter(endOfToday);
-      }).toList();
+            return !ticket.timeSlot.isBefore(startOfToday) &&
+                   !ticket.timeSlot.isAfter(endOfToday);
+          }).toList();
+          
+      // ✅ THIS is the magic that sorts 9AM first, then 10AM.
+      tickets.sort((a, b) {
+        int timeCompare = a.timeSlot.compareTo(b.timeSlot);
+        if (timeCompare != 0) return timeCompare; 
+        return a.queueNumber.compareTo(b.queueNumber); 
+      });
+          
+      return tickets;
     } catch (e) {
       print('❌ Error getting active tickets: $e');
       return [];
@@ -406,6 +428,81 @@ Future<Set<String>> getPendingDocumentIdsForStudent(String studentId) async {
     } catch (e) {
       print('❌ Error deleting tickets by range: $e');
       return 0;
+    }
+  }
+  // --- TICKET LOCKING ---
+  Future<void> startServingTicket(String ticketId, String cashierId, String cashierName) async {
+    await _firestore.collection('queueTickets').doc(ticketId).update({
+      'status': 'serving',
+      'servingCashierId': cashierId,
+      'servingCashierName': cashierName,
+    });
+  }
+
+  // --- CASHIER BREAKS ---
+  Future<void> startBreak(String cashierId) async {
+    await _firestore.collection('users').doc(cashierId).update({
+      'isOnBreak': true,
+      'breakStartTime': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<void> endBreak(String cashierId) async {
+    final doc = await _firestore.collection('users').doc(cashierId).get();
+    final startTimeStr = doc.data()?['breakStartTime'];
+    
+    if (startTimeStr != null) {
+      final startTime = DateTime.parse(startTimeStr);
+      final endTime = DateTime.now();
+      final durationSeconds = endTime.difference(startTime).inSeconds;
+
+      // 1. Turn off break on user
+      await _firestore.collection('users').doc(cashierId).update({
+        'isOnBreak': false,
+        'breakStartTime': null,
+      });
+
+      // 2. Log the break for reporting
+      await _firestore.collection('breaks').add({
+        'cashierId': cashierId,
+        'cashierName': doc.data()?['name'] ?? 'Unknown',
+        'startTime': startTime.toIso8601String(),
+        'endTime': endTime.toIso8601String(),
+        'durationSeconds': durationSeconds,
+        'date': '${endTime.month}/${endTime.day}/${endTime.year}',
+      });
+    }
+  }
+
+  // --- FOR PUBLIC DISPLAY ---
+  Stream<QuerySnapshot> getCashiersStream() {
+    return _firestore.collection('users').where('role', isEqualTo: 'cashier').snapshots();
+  }
+
+  Stream<QuerySnapshot> getUpcomingTicketsStream() {
+    return _firestore
+        .collection('queueTickets')
+        .where('status', isEqualTo: 'waiting')
+        .orderBy('timeSlot', descending: false)
+        .limit(10)
+        .snapshots();
+  }
+  
+  Stream<QuerySnapshot> getServingTicketsStream() {
+    return _firestore
+        .collection('queueTickets')
+        .where('status', isEqualTo: 'serving')
+        .snapshots();
+  }
+  
+//for cashier right order view of queueing
+  Future<bool> updateUserStatus(String uid, bool isActive) async {
+    try {
+      await _firestore.collection('users').doc(uid).update({'isActive': isActive});
+      return true;
+    } catch (e) {
+      print('❌ Error updating user status: $e');
+      return false;
     }
   }
 

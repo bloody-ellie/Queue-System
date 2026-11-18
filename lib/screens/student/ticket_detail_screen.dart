@@ -16,6 +16,7 @@ class TicketDetailScreen extends StatefulWidget {
 class _TicketDetailScreenState extends State<TicketDetailScreen> {
   late QueueTicket _currentTicket;
   late StreamSubscription _subscription;
+  
 
   @override
   void initState() {
@@ -104,6 +105,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             _buildInfoRow(Icons.person, 'Name', ticket.studentName),
             _buildInfoRow(Icons.school, 'Year Level', ticket.yearLevel),
             _buildInfoRow(Icons.access_time, 'Time Slot', _formatTime(ticket.timeSlot)),
+            _buildInfoRow(Icons.access_time,'Time Slot', _formatTimeRange(ticket.timeSlot, ticket.timeSlotEnd)),
 
             const SizedBox(height: 20),
             _buildServicesSection(ticket),
@@ -119,6 +121,8 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       ),
     );
   }
+
+  
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Padding(
@@ -217,6 +221,13 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     }
   }
 
+  String _formatTimeRange(DateTime start, DateTime? end) {
+    final startStr = _formatTime(start);
+    if (end == null) return startStr; // Fallback for old tickets
+    final endStr = _formatTime(end);
+    return '$startStr - $endStr';
+  }
+
   String _formatTime(DateTime time) {
     final hour = time.hour > 12 ? time.hour - 12 : time.hour;
     final minute = time.minute.toString().padLeft(2, '0');
@@ -224,3 +235,4 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     return '$hour:$minute $period';
   }
 }
+

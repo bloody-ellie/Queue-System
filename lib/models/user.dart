@@ -10,6 +10,9 @@ class AppUser {
   final String? lastName;
   final String? middleInitial;   // e.g., "D"
   final String? yearLevel;       // e.g., "1st Year", "2nd Year"
+  final bool isActive;    //for active/inactive students
+  final bool isOnBreak;
+  final DateTime? breakStartTime;
 
   AppUser({
     required this.uid,
@@ -21,6 +24,9 @@ class AppUser {
     this.lastName,
     this.middleInitial,
     this.yearLevel,
+    this.isActive = true,
+    this.isOnBreak = false,
+    this.breakStartTime,
   });
 
   /// Get formatted full name with middle initial
@@ -43,6 +49,9 @@ class AppUser {
         'lastName': lastName,
         'middleInitial': middleInitial,
         'yearLevel': yearLevel,
+        'isOnBreak': isOnBreak,
+        'breakStartTime': breakStartTime?.toIso8601String(),
+        'isActive': isActive,
       };
 
   factory AppUser.fromMap(String uid, Map<String, dynamic> map) => AppUser(
@@ -55,5 +64,8 @@ class AppUser {
         lastName: map['lastName'],
         middleInitial: map['middleInitial'],
         yearLevel: map['yearLevel'],
+        isActive: map['isActive'] ?? true,
+        isOnBreak: map['isOnBreak'] ?? false,
+        breakStartTime: map['breakStartTime'] != null ? DateTime.parse(map['breakStartTime']) : null,
       );
 }

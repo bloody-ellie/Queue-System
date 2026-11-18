@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/queue_provider.dart';
 import '../../models/queue_ticket.dart';
+import '../../models/user.dart';
 import '../../services/firestore_service.dart';
 
 class CashierDashboard extends StatefulWidget {
@@ -18,6 +19,8 @@ class _CashierDashboardState extends State<CashierDashboard> {
   List<QueueTicket> _allActive = [];
   List<QueueTicket> _filtered = [];
   bool _isLoading = true;
+  bool _isOnBreak = false;
+  DateTime? _breakStartTime;
 
   @override
   void initState() {
@@ -27,9 +30,9 @@ class _CashierDashboardState extends State<CashierDashboard> {
 
   Future<void> _loadActiveTickets() async {
     setState(() => _isLoading = true);
+
     final tickets = await _fs.getActiveTickets();
-    // Sort by queue number
-    tickets.sort((a, b) => a.queueNumber.compareTo(b.queueNumber));
+
     setState(() {
       _allActive = tickets;
       _filtered = tickets;
@@ -43,11 +46,19 @@ class _CashierDashboardState extends State<CashierDashboard> {
       if (q.isEmpty) {
         _filtered = _allActive;
       } else {
-        _filtered = _allActive.where((t) =>
-            t.studentNumber.toLowerCase().contains(q) ||
-            t.studentName.toLowerCase().contains(q) ||
-            t.queueNumber.toString().contains(q)).toList();
+        _filtered = _allActive
+            .where((t) =>
+                t.studentNumber.toLowerCase().contains(q) ||
+                t.studentName.toLowerCase().contains(q) ||
+                t.queueNumber.toString().contains(q))
+            .toList();
       }
+
+      _filtered.sort((a, b) {
+        int timeCompare = a.timeSlot.compareTo(b.timeSlot);
+        if (timeCompare != 0) return timeCompare;
+        return a.queueNumber.compareTo(b.queueNumber);
+      });
     });
   }
 
@@ -57,7 +68,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
 
     await provider.updateTicketStatus(ticket.id, status);
 
-    // Confirm payments when served
     if (status == 'served') {
       final payments = await _fs.getPaymentsForTicket(ticket.id);
       for (var payment in payments) {
@@ -65,7 +75,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
       }
     }
 
-    // Refresh list
     await _loadActiveTickets();
   }
 
@@ -78,10 +87,27 @@ class _CashierDashboardState extends State<CashierDashboard> {
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cashier Dashboard'),
         actions: [
+          TextButton.icon(
+            onPressed: () async {
+              final auth = Provider.of<AuthProvider>(context, listen: false);
+              if (_isOnBreak) {
+                await _fs.endBreak(auth.currentUser!.uid);
+                setState(() { _isOnBreak = false; _breakStartTime = null; });
+              } else {
+                await _fs.startBreak(auth.currentUser!.uid);
+                setState(() { _isOnBreak = true; _breakStartTime = DateTime.now(); });
+              }
+            },
+            icon: Icon(_isOnBreak ? Icons.play_arrow : Icons.pause, color: Colors.white),
+            label: Text(_isOnBreak ? 'End Break' : 'On Break', style: const TextStyle(color: Colors.white)),
+            style: TextButton.styleFrom(backgroundColor: _isOnBreak ? Colors.green : Colors.orange),
+          ),
+          const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadActiveTickets,
@@ -99,7 +125,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
       ),
       body: Column(
         children: [
-          // ✅ Search bar
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
@@ -125,8 +150,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
               ),
             ),
           ),
-
-          // Results count
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
@@ -139,8 +162,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
             ),
           ),
           const SizedBox(height: 8),
-
-          // List
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -152,9 +173,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
                             Icon(Icons.search_off, size: 64, color: Colors.grey.shade400),
                             const SizedBox(height: 16),
                             Text(
-                              _searchController.text.isEmpty
-                                  ? 'No active tickets'
-                                  : 'No matching tickets found',
+                              _searchController.text.isEmpty ? 'No active tickets' : 'No matching tickets found',
                               style: TextStyle(color: Colors.grey.shade600),
                             ),
                           ],
@@ -165,7 +184,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
                         itemCount: _filtered.length,
                         itemBuilder: (ctx, i) {
                           final ticket = _filtered[i];
-                          return _buildTicketCard(ticket);
+                          return _buildTicketCard(ticket, auth.currentUser!);
                         },
                       ),
           ),
@@ -174,7 +193,9 @@ class _CashierDashboardState extends State<CashierDashboard> {
     );
   }
 
-  Widget _buildTicketCard(QueueTicket ticket) {
+  Widget _buildTicketCard(QueueTicket ticket, AppUser currentUser) {
+    bool isLockedByOther = ticket.status == 'serving' && ticket.servingCashierId != currentUser.uid;
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
       elevation: 2,
@@ -184,7 +205,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header: Queue # and status
+            // Header
             Row(
               children: [
                 CircleAvatar(
@@ -192,11 +213,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
                   backgroundColor: _statusColor(ticket.status),
                   child: Text(
                     '${ticket.queueNumber}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -204,16 +221,8 @@ class _CashierDashboardState extends State<CashierDashboard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ✅ Student name
-                      Text(
-                        ticket.studentName,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                      // ✅ Student number and year level
-                      Text(
-                        '${ticket.studentNumber} • ${ticket.yearLevel}',
-                        style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                      ),
+                      Text(ticket.studentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text('${ticket.studentNumber} • ${ticket.yearLevel}', style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
                     ],
                   ),
                 ),
@@ -225,11 +234,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
                   ),
                   child: Text(
                     ticket.status.toUpperCase(),
-                    style: TextStyle(
-                      color: _statusColor(ticket.status),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: _statusColor(ticket.status), fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
               ],
@@ -241,15 +246,12 @@ class _CashierDashboardState extends State<CashierDashboard> {
               children: [
                 Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
                 const SizedBox(width: 6),
-                Text(
-                  'Slot: ${_formatDateTime(ticket.timeSlot)}',
-                  style: TextStyle(color: Colors.grey.shade700),
-                ),
+                Text('Slot: ${_formatTimeRange(ticket.timeSlot, ticket.timeSlotEnd)}', style: TextStyle(color: Colors.grey.shade700)),
               ],
             ),
             const SizedBox(height: 6),
 
-            // Services summary
+            // Services
             if (ticket.serviceItems.isNotEmpty) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,59 +269,75 @@ class _CashierDashboardState extends State<CashierDashboard> {
               const SizedBox(height: 6),
             ],
 
-            // Actions
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (ticket.status == 'waiting')
-                  ElevatedButton.icon(
-                    onPressed: () => _updateStatus(ticket, 'serving'),
-                    icon: const Icon(Icons.play_arrow, size: 18),
-                    label: const Text('Start Serving'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            const SizedBox(height: 8),
+            isLockedByOther
+                ? Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(8)),
+                    child: Text(
+                      '🔒 Being served by: ${ticket.servingCashierName}',
+                      style: TextStyle(color: Colors.orange.shade900, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (ticket.status == 'waiting')
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            await _fs.startServingTicket(ticket.id, currentUser.uid, currentUser.name);
+                            _loadActiveTickets();
+                          },
+                          icon: const Icon(Icons.play_arrow, size: 18),
+                          label: const Text('Start Serving'),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                        ),
+                      if (ticket.status == 'serving') ...[
+                        ElevatedButton.icon(
+                          onPressed: () => _updateStatus(ticket, 'served'),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('Served'),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: () => _updateStatus(ticket, 'passed'),
+                          icon: const Icon(Icons.close, size: 18),
+                          label: const Text('Pass'),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                        ),
+                      ],
+                    ],
                   ),
-                if (ticket.status == 'serving') ...[
-                  ElevatedButton.icon(
-                    onPressed: () => _updateStatus(ticket, 'served'),
-                    icon: const Icon(Icons.check, size: 18),
-                    label: const Text('Served'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () => _updateStatus(ticket, 'passed'),
-                    icon: const Icon(Icons.close, size: 18),
-                    label: const Text('Pass'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  ),
-                ],
-              ],
-            ),
           ],
         ),
       ),
     );
   }
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'waiting':
-        return Colors.orange;
-      case 'serving':
-        return Colors.green;
-      case 'served':
-        return Colors.blue;
-      case 'passed':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
+  String _formatTimeRange(DateTime start, DateTime? end) {
+    final startStr = _formatTime(start);
+    if (end == null) return startStr;
+    final endStr = _formatTime(end);
+    return '$startStr - $endStr';
   }
 
-  String _formatDateTime(DateTime date) {
-    final hour = date.hour > 12 ? date.hour - 12 : date.hour;
-    final minute = date.minute.toString().padLeft(2, '0');
-    final period = date.hour >= 12 ? 'PM' : 'AM';
-    return '${date.month}/${date.day}/${date.year} $hour:$minute $period';
+  String _formatTime(DateTime time) {
+    final hour = time.hour > 12 ? time.hour - 12 : time.hour;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'waiting': return Colors.orange;
+      case 'serving': return Colors.green;
+      case 'served': return Colors.blue;
+      case 'passed': return Colors.red;
+      default: return Colors.grey;
+    }
   }
 }

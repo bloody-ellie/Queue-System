@@ -7,17 +7,27 @@ class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Sign in with email/password
-  Future<AppUser?> signIn(String email, String password) async {
+   Future<AppUser?> signIn(String email, String password) async {
     try {
       UserCredential result = await _auth.signInWithEmailAndPassword(
           email: email, password: password);
       User? user = result.user;
+      
       if (user != null) {
-        // fetch user data from Firestore
-        DocumentSnapshot doc =
+        DocumentSnapshot doc = 
             await _firestore.collection('users').doc(user.uid).get();
+        
         if (doc.exists) {
-          return AppUser.fromMap(user.uid, doc.data() as Map<String, dynamic>);
+          final appUser = AppUser.fromMap(user.uid, doc.data() as Map<String, dynamic>);
+          
+          // ✅ Check if account is deactivated
+          if (!appUser.isActive) {
+            print('❌ Account is inactive. Denying access.');
+            await _auth.signOut(); // Force sign out immediately
+            return null;
+          }
+          
+          return appUser;
         }
       }
       return null;

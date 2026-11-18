@@ -177,6 +177,11 @@ class _ManageSchedulesState extends State<ManageSchedules> {
 
     if (newSchedules.isNotEmpty) {
       await _fs.bulkCreateSchedules(newSchedules);
+       // ✅ Send Notification
+    await _fs.sendNotification(
+      'Bulk Schedules Released',
+      'Admin generated new schedules from ${DateFormat('MMM d').format(_bulkStartDate!)} to ${DateFormat('MMM d').format(_bulkEndDate!)}.',
+    );
       _loadSchedules();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -303,6 +308,11 @@ class _ManageSchedulesState extends State<ManageSchedules> {
     );
 
     await _fs.createSchedule(schedule);
+  // ✅ Send Notification
+    await _fs.sendNotification(
+      'New Schedule Released',
+      'New schedules available for ${_formatDate(_selectedDate!)} from ${_formatTime(_startTime!)} to ${_formatTime(_endTime!)}.',
+    );
 
     if (mounted) {
       Navigator.pop(context);

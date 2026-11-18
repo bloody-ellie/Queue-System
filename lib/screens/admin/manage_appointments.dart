@@ -18,6 +18,26 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
   bool _isLoading = false;
   bool _hasSearched = false;
 
+  // ✅ HELPERS (Inside the State class)
+  String _formatTimeRange(DateTime start, DateTime? end) {
+    final startStr = _formatTime(start);
+    if (end == null) return startStr; // Fallback for old tickets
+    final endStr = _formatTime(end);
+    return '$startStr - $endStr';
+  }
+
+  String _formatTime(DateTime time) {
+    final hour = time.hour > 12 ? time.hour - 12 : time.hour;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.month}/${date.day}/${date.year}';
+  }
+  // ✅ END OF HELPERS
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -103,7 +123,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
                 ),
               ),
             ],
-            
+
             const SizedBox(height: 16),
             
             Row(
@@ -170,7 +190,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.check_circle, size: 64, color: Colors.green),
+                            Icon(Icons.check_circle, size: 64, color: Colors.green),
                             SizedBox(height: 16),
                             Text(
                               'No appointments found for this date range.',
@@ -195,7 +215,9 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
                               ),
                               title: Text('Ticket #${ticket.queueNumber}'),
                               subtitle: Text(
-                                'Student ID: ${ticket.studentId}\nStatus: ${ticket.status.toUpperCase()}\nScheduled: ${_formatDateTime(ticket.timeSlot)}',
+                                  'Student ID: ${ticket.studentId}\n'
+                                  'Status: ${ticket.status.toUpperCase()}\n'
+                                  'Scheduled: ${_formatDate(ticket.timeSlot)} | ${_formatTimeRange(ticket.timeSlot, ticket.timeSlotEnd)}',
                               ),
                               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                             ),
@@ -328,7 +350,11 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
       
       // Also delete related payments - we can use cleanup service or call firestore directly
       // For simplicity, we'll just delete tickets and let the cleanup service handle payments later.
-      
+       // ✅ Send Notification
+      await _fs.sendNotification(
+        'Appointments Cancelled',
+        'All appointments from ${_formatDate(_startDate!)} to ${_formatDate(_endDate!)} have been deleted by the Admin.',
+      );
       setState(() {
         _tickets = [];
         _hasSearched = false;
@@ -347,17 +373,6 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
         SnackBar(content: Text('❌ Error: $e')),
       );
     }
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.month}/${date.day}/${date.year}';
-  }
-
-  String _formatDateTime(DateTime date) {
-    final hour = date.hour > 12 ? date.hour - 12 : date.hour;
-    final minute = date.minute.toString().padLeft(2, '0');
-    final period = date.hour >= 12 ? 'PM' : 'AM';
-    return '${date.month}/${date.day} at $hour:$minute $period';
   }
 
   Color _getStatusColor(String status) {

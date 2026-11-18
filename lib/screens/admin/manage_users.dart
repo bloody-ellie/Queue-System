@@ -17,40 +17,24 @@ class _ManageUsersState extends State<ManageUsers> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
+        // ✅ FIXED: AppBar is now matching the dark blue theme
         appBar: AppBar(
-          title: const Text(
-            'Manage Users',
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: Colors.white,
-          iconTheme: const IconThemeData(color: Colors.black),
+          title: const Text('Manage Users'),
+          backgroundColor: Colors.blue.shade900,
+          foregroundColor: Colors.white,
           elevation: 1,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.person_add),
-              tooltip: 'Create New User',
-              onPressed: () async {
-                final created = await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CreateUserScreen()),
-                );
-                if (created == true) setState(() {});
-              },
-            ),
-          ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(60),
             child: Container(
-              color: Colors.white,
               padding: const EdgeInsets.only(bottom: 8),
               child: TabBar(
                 indicator: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(30),
+                  color: Colors.white, // White pill for active tab
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 indicatorSize: TabBarIndicatorSize.tab,
-                labelColor: Colors.blue.shade800,
-                unselectedLabelColor: Colors.grey.shade600,
+                labelColor: Colors.blue.shade900, // Dark blue text on white pill
+                unselectedLabelColor: Colors.white70, // Faded white for inactive tabs
                 dividerColor: Colors.transparent,
                 tabs: const [
                   Tab(icon: Icon(Icons.school), text: 'Students'),
@@ -60,6 +44,10 @@ class _ManageUsersState extends State<ManageUsers> {
             ),
           ),
         ),
+        
+        // ✅ Background of the body is white
+        backgroundColor: Colors.white, 
+        
         body: const TabBarView(
           children: [
             _UserList(role: 'student'),
@@ -67,7 +55,7 @@ class _ManageUsersState extends State<ManageUsers> {
           ],
         ),
         floatingActionButton: FloatingActionButton(
-          backgroundColor: Colors.blue,
+          backgroundColor: Colors.blue.shade900,
           foregroundColor: Colors.white,
           onPressed: () async {
             final created = await Navigator.push(
@@ -83,7 +71,7 @@ class _ManageUsersState extends State<ManageUsers> {
   }
 }
 
-// ✅ The _UserList class is now inside this same file, below ManageUsers
+// ✅ The _UserList class
 class _UserList extends StatefulWidget {
   final String role; // 'student' or 'cashier'
   const _UserList({required this.role});
@@ -180,7 +168,7 @@ class _UserListState extends State<_UserList> {
                 borderRadius: BorderRadius.circular(12),
               ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: Colors.grey.shade100,
             ),
           ),
         ),
@@ -232,23 +220,56 @@ class _UserListState extends State<_UserList> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // ✅ FIXED: Active/Inactive Switch for Students with FittedBox to prevent overflow
+                        if (widget.role == 'student')
+                          SizedBox(
+                            height: 48, // Constrain to ListTile height
+                            child: FittedBox(
+                              fit: BoxFit.fitHeight,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Switch(
+                                    value: user.isActive,
+                                    activeColor: Colors.green,
+                                    onChanged: (val) async {
+                                      setState(() => _isLoading = true); 
+                                      await _fs.updateUserStatus(user.uid, val);
+                                      await _loadUsers(); 
+                                    },
+                                  ),
+                                  Text(
+                                    user.isActive ? 'Active' : 'Inactive',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: user.isActive ? Colors.green : Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        
+                        // Edit is only for students
                         if (widget.role == 'student')
                           IconButton(
                             icon: const Icon(Icons.edit, color: Colors.blue),
                             onPressed: () async {
                               final updated = await Navigator.push(
                                 context,
-                                MaterialPageRoute(
-                                  builder: (_) => EditUserScreen(student: user),
-                                ),
+                                MaterialPageRoute(builder: (_) => EditUserScreen(student: user)),
                               );
                               if (updated == true) _loadUsers();
                             },
                           ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteUser(user),
-                        ),
+                        
+                        // ✅ Delete is now ONLY for Cashiers
+                        if (widget.role == 'cashier')
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _deleteUser(user),
+                          ),
                       ],
                     ),
                   ),

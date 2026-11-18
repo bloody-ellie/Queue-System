@@ -3,15 +3,16 @@ class QueueTicket {
   final String studentId;
   final String paymentId;
   final int queueNumber;
-  final String status; // 'waiting', 'serving', 'served', 'passed'
-  final DateTime timeSlot;
+  final String status;
+  final DateTime timeSlot;      // Start time
+  final DateTime? timeSlotEnd;  // ✅ NEW: End time (nullable for old tickets)
   final DateTime createdAt;
   final List<ServiceItem> serviceItems;
-
-  // ✅ NEW: Student info snapshot (for fast cashier lookup)
   final String studentNumber;
   final String studentName;
   final String yearLevel;
+  final String? servingCashierId;
+  final String? servingCashierName;
 
   QueueTicket({
     required this.id,
@@ -20,11 +21,14 @@ class QueueTicket {
     required this.queueNumber,
     required this.status,
     required this.timeSlot,
+    this.timeSlotEnd,           // ✅ NEW
     required this.createdAt,
     this.serviceItems = const [],
     this.studentNumber = '',
     this.studentName = '',
     this.yearLevel = '',
+    this.servingCashierId,
+    this.servingCashierName,
   });
 
   Map<String, dynamic> toMap() => {
@@ -33,11 +37,14 @@ class QueueTicket {
         'queueNumber': queueNumber,
         'status': status,
         'timeSlot': timeSlot.toIso8601String(),
+        'timeSlotEnd': timeSlotEnd?.toIso8601String(), // ✅ NEW: Save to DB
         'createdAt': createdAt.toIso8601String(),
         'serviceItems': serviceItems.map((item) => item.toMap()).toList(),
         'studentNumber': studentNumber,
         'studentName': studentName,
         'yearLevel': yearLevel,
+        'servingCashierId': servingCashierId,
+        'servingCashierName': servingCashierName,
       };
 
   factory QueueTicket.fromMap(String id, Map<String, dynamic> map) => QueueTicket(
@@ -47,18 +54,22 @@ class QueueTicket {
         queueNumber: map['queueNumber'] ?? 0,
         status: map['status'] ?? 'waiting',
         timeSlot: DateTime.parse(map['timeSlot']),
+        timeSlotEnd: map['timeSlotEnd'] != null 
+            ? DateTime.parse(map['timeSlotEnd']) 
+            : null, // ✅ NEW: Read from DB
         createdAt: DateTime.parse(map['createdAt']),
         serviceItems: (map['serviceItems'] as List?)
                 ?.map((item) => ServiceItem.fromMap(item))
-                .toList() ??
-            [],
+                .toList() ?? [],
         studentNumber: map['studentNumber'] ?? '',
         studentName: map['studentName'] ?? '',
         yearLevel: map['yearLevel'] ?? '',
+        servingCashierId: map['servingCashierId'],
+        servingCashierName: map['servingCashierName'],
       );
 }
 
-// ServiceItem class stays the same
+// ServiceItem class remains the same
 class ServiceItem {
   final String name;
   final String type;
