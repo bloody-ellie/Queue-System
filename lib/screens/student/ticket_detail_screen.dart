@@ -67,7 +67,6 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Ticket info card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -99,11 +98,11 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Student info
             _buildInfoRow(Icons.badge, 'Student Number', ticket.studentNumber),
             _buildInfoRow(Icons.person, 'Name', ticket.studentName),
             _buildInfoRow(Icons.school, 'Year Level', ticket.yearLevel),
-            _buildInfoRow(Icons.access_time, 'Time Slot', _formatTime(ticket.timeSlot)),
+            // ✅ Only ONE Time Slot row now
+            _buildInfoRow(Icons.access_time, 'Time Slot', _formatTimeRange(ticket.timeSlot, ticket.timeSlotEnd)),
 
             const SizedBox(height: 20),
             _buildServicesSection(ticket),
@@ -153,8 +152,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('📋 Your Request',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text('📋 Your Request', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           ...ticket.serviceItems.map((item) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -204,17 +202,19 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
 
   Color get _statusColor {
     switch (_currentTicket.status) {
-      case 'waiting':
-        return Colors.orange;
-      case 'serving':
-        return Colors.green;
-      case 'served':
-        return Colors.blue;
-      case 'passed':
-        return Colors.red;
-      default:
-        return Colors.grey;
+      case 'waiting': return Colors.orange;
+      case 'serving': return Colors.green;
+      case 'served': return Colors.blue;
+      case 'passed': return Colors.red;
+      default: return Colors.grey;
     }
+  }
+
+  String _formatTimeRange(DateTime start, DateTime? end) {
+    final startStr = _formatTime(start);
+    if (end == null) return startStr; 
+    final endStr = _formatTime(end);
+    return '$startStr - $endStr';
   }
 
   String _formatTime(DateTime time) {

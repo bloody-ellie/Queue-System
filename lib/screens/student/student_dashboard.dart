@@ -32,7 +32,6 @@ class StudentDashboard extends StatelessWidget {
       ),
       body: Column(
         children: [
-          // ✅ Student info card
           Container(
             width: double.infinity,
             margin: const EdgeInsets.all(16),
@@ -98,118 +97,116 @@ class StudentDashboard extends StatelessWidget {
           const SizedBox(height: 8),
 
           Expanded(
-  child: StreamBuilder<List<QueueTicket>>(
-    stream: Provider.of<QueueProvider>(context)
-        .getTicketsForStudent(studentId),
-    builder: (ctx, snapshot) {
-      if (snapshot.connectionState == ConnectionState.waiting) {
-        return const Center(child: CircularProgressIndicator());
-      }
-      if (snapshot.hasError) {
-        return Center(child: Text('Error: ${snapshot.error}'));
-      }
+            child: StreamBuilder<List<QueueTicket>>(
+              stream: Provider.of<QueueProvider>(context).getTicketsForStudent(studentId),
+              builder: (ctx, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
 
-      // ✅ Filter out tickets from past dates
-      final now = DateTime.now();
-      final startOfToday = DateTime(now.year, now.month, now.day, 0, 0, 0);
+                final now = DateTime.now();
+                final startOfToday = DateTime(now.year, now.month, now.day, 0, 0, 0);
 
-      final tickets = (snapshot.data ?? []).where((t) {
-        // Hide tickets whose date is before today
-        return !t.timeSlot.isBefore(startOfToday);
-      }).toList();
+                final tickets = (snapshot.data ?? []).where((t) {
+                  return !t.timeSlot.isBefore(startOfToday);
+                }).toList();
 
-      // Sort: today first, then future (by date)
-      tickets.sort((a, b) => a.timeSlot.compareTo(b.timeSlot));
+                tickets.sort((a, b) => a.timeSlot.compareTo(b.timeSlot));
 
-      if (tickets.isEmpty) {
-        return const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.airplane_ticket, size: 64, color: Colors.grey),
-              SizedBox(height: 16),
-              Text('No active tickets.'),
-              Text(
-                'Request a service to get started!',
-                style: TextStyle(color: Colors.grey),
-              ),
-            ],
-          ),
-        );
-      }
-
-      return ListView.builder(
-        padding: const EdgeInsets.all(8),
-        itemCount: tickets.length,
-        itemBuilder: (ctx, i) {
-          final ticket = tickets[i];
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: _statusColor(ticket.status).withValues(alpha: 0.2),
-                child: Text(
-                  '${ticket.queueNumber}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: _statusColor(ticket.status),
-                  ),
-                ),
-              ),
-              title: Text('Ticket #${ticket.queueNumber}'),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Status: ${ticket.status.toUpperCase()}'),
-                  Text('Date: ${_formatDateTime(ticket.timeSlot)}'),
-                  if (ticket.serviceItems.isNotEmpty)
-                    Text(
-                      'Services: ${ticket.serviceItems.map((s) => s.name).join(', ')}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                if (tickets.isEmpty) {
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.airplane_ticket, size: 64, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text('No active tickets.'),
+                        Text(
+                          'Request a service to get started!',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
                     ),
-                ],
-              ),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => TicketDetailScreen(ticket: ticket),
-                ),
-              ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(8),
+                  itemCount: tickets.length,
+                  itemBuilder: (ctx, i) {
+                    final ticket = tickets[i];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: _statusColor(ticket.status).withValues(alpha: 0.2),
+                          child: Text(
+                            '${ticket.queueNumber}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _statusColor(ticket.status),
+                            ),
+                          ),
+                        ),
+                        title: Text('Ticket #${ticket.queueNumber}'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Status: ${ticket.status.toUpperCase()}'),
+                            Text('Date: ${_formatDate(ticket.timeSlot)}'),
+                            Text('Time: ${_formatTimeRange(ticket.timeSlot, ticket.timeSlotEnd)}'),
+                            if (ticket.serviceItems.isNotEmpty)
+                              Text(
+                                'Services: ${ticket.serviceItems.map((s) => s.name).join(', ')}',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TicketDetailScreen(ticket: ticket),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
             ),
-          );
-        },
-      );
-    },
-  ),
-),
+          ),
         ],
       ),
     );
   }
-Color _statusColor(String status) {
-  switch (status) {
-    case 'waiting':
-      return Colors.orange;
-    case 'serving':
-      return Colors.green;
-    case 'served':
-      return Colors.blue;
-    case 'passed':
-      return Colors.red;
-    default:
-      return Colors.grey;
-  }
-}
 
-String _formatDateTime(DateTime date) {
-  final hour = date.hour > 12 ? date.hour - 12 : date.hour;
-  final minute = date.minute.toString().padLeft(2, '0');
-  final period = date.hour >= 12 ? 'PM' : 'AM';
-  return '${date.month}/${date.day}/${date.year} - $hour:$minute $period';
-}
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'waiting': return Colors.orange;
+      case 'serving': return Colors.green;
+      case 'served': return Colors.blue;
+      case 'passed': return Colors.red;
+      default: return Colors.grey;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.month}/${date.day}/${date.year}';
+  }
+
+  String _formatTimeRange(DateTime start, DateTime? end) {
+    final startStr = _formatTime(start);
+    if (end == null) return startStr; 
+    final endStr = _formatTime(end);
+    return '$startStr - $endStr';
+  }
+
   String _formatTime(DateTime time) {
     final hour = time.hour > 12 ? time.hour - 12 : time.hour;
     final minute = time.minute.toString().padLeft(2, '0');

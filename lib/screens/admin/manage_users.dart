@@ -229,26 +229,62 @@ class _UserListState extends State<_UserList> {
                           ),
                       ],
                     ),
-                    trailing: Row(
+                                        trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // ✅ NEW: Active/Inactive Switch for Students
+                        if (widget.role == 'student')
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Switch(
+                                value: user.isActive,
+                                activeColor: Colors.green,
+                                onChanged: (val) async {
+                                  // Optimistically update UI
+                                  setState(() {
+                                    final index = _allUsers.indexOf(user);
+                                    _allUsers[index] = AppUser(
+                                      uid: user.uid, email: user.email, name: user.name, role: user.role,
+                                      studentNumber: user.studentNumber, firstName: user.firstName, 
+                                      lastName: user.lastName, middleInitial: user.middleInitial, 
+                                      yearLevel: user.yearLevel, course: user.course, isActive: val,
+                                    );
+                                    _onSearch(_searchCtrl.text); // Refresh filter
+                                  });
+                                  await _fs.updateUserStatus(user.uid, val);
+                                },
+                              ),
+                              Text(
+                                user.isActive ? 'Active' : 'Inactive',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: user.isActive ? Colors.green : Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        
+                        // Edit is only for students
                         if (widget.role == 'student')
                           IconButton(
                             icon: const Icon(Icons.edit, color: Colors.blue),
                             onPressed: () async {
                               final updated = await Navigator.push(
                                 context,
-                                MaterialPageRoute(
-                                  builder: (_) => EditUserScreen(student: user),
-                                ),
+                                MaterialPageRoute(builder: (_) => EditUserScreen(student: user)),
                               );
                               if (updated == true) _loadUsers();
                             },
                           ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteUser(user),
-                        ),
+                        
+                        // ✅ Delete is now ONLY for Cashiers (Students use the switch)
+                        if (widget.role == 'cashier')
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _deleteUser(user),
+                          ),
                       ],
                     ),
                   ),

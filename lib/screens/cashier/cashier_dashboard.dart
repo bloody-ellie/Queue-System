@@ -28,8 +28,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
   Future<void> _loadActiveTickets() async {
     setState(() => _isLoading = true);
     final tickets = await _fs.getActiveTickets();
-    // Sort by queue number
-    tickets.sort((a, b) => a.queueNumber.compareTo(b.queueNumber));
+
     setState(() {
       _allActive = tickets;
       _filtered = tickets;
@@ -48,6 +47,11 @@ class _CashierDashboardState extends State<CashierDashboard> {
             t.studentName.toLowerCase().contains(q) ||
             t.queueNumber.toString().contains(q)).toList();
       }
+      _filtered.sort((a, b) {
+        int timeCompare = a.timeSlot.compareTo(b.timeSlot);
+        if (timeCompare != 0) return timeCompare;
+        return a.queueNumber.compareTo(b.queueNumber);
+      });
     });
   }
 
@@ -57,7 +61,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
 
     await provider.updateTicketStatus(ticket.id, status);
 
-    // Confirm payments when served
     if (status == 'served') {
       final payments = await _fs.getPaymentsForTicket(ticket.id);
       for (var payment in payments) {
@@ -65,7 +68,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
       }
     }
 
-    // Refresh list
     await _loadActiveTickets();
   }
 
@@ -99,7 +101,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
       ),
       body: Column(
         children: [
-          // ✅ Search bar
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
@@ -125,8 +126,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
               ),
             ),
           ),
-
-          // Results count
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
@@ -139,8 +138,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
             ),
           ),
           const SizedBox(height: 8),
-
-          // List
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -184,7 +181,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header: Queue # and status
             Row(
               children: [
                 CircleAvatar(
@@ -204,12 +200,10 @@ class _CashierDashboardState extends State<CashierDashboard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ✅ Student name
                       Text(
                         ticket.studentName,
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
-                      // ✅ Student number and year level
                       Text(
                         '${ticket.studentNumber} • ${ticket.yearLevel}',
                         style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
@@ -236,20 +230,18 @@ class _CashierDashboardState extends State<CashierDashboard> {
             ),
             const Divider(height: 20),
 
-            // Time slot
             Row(
               children: [
                 Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
                 const SizedBox(width: 6),
                 Text(
-                  'Slot: ${_formatDateTime(ticket.timeSlot)}',
+                  'Slot: ${_formatDate(ticket.timeSlot)} | ${_formatTimeRange(ticket.timeSlot, ticket.timeSlotEnd)}',
                   style: TextStyle(color: Colors.grey.shade700),
                 ),
               ],
             ),
             const SizedBox(height: 6),
 
-            // Services summary
             if (ticket.serviceItems.isNotEmpty) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,7 +259,6 @@ class _CashierDashboardState extends State<CashierDashboard> {
               const SizedBox(height: 6),
             ],
 
-            // Actions
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -316,10 +307,21 @@ class _CashierDashboardState extends State<CashierDashboard> {
     }
   }
 
-  String _formatDateTime(DateTime date) {
-    final hour = date.hour > 12 ? date.hour - 12 : date.hour;
-    final minute = date.minute.toString().padLeft(2, '0');
-    final period = date.hour >= 12 ? 'PM' : 'AM';
-    return '${date.month}/${date.day}/${date.year} $hour:$minute $period';
+  String _formatDate(DateTime date) {
+    return '${date.month}/${date.day}/${date.year}';
+  }
+
+  String _formatTimeRange(DateTime start, DateTime? end) {
+    final startStr = _formatTime(start);
+    if (end == null) return startStr; 
+    final endStr = _formatTime(end);
+    return '$startStr - $endStr';
+  }
+
+  String _formatTime(DateTime time) {
+    final hour = time.hour > 12 ? time.hour - 12 : time.hour;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
   }
 }

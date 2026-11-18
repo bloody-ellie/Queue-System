@@ -274,35 +274,40 @@ Future<void> bulkCreateSchedules(List<Schedule> schedules) async {
   }
 
 // ---------- Cashier: Active Tickets (TODAY ONLY) ----------
-  /// Returns tickets whose scheduled date is EXACTLY today.
-  /// Excludes past dates (yesterday and older) AND future dates (tomorrow onwards).
   Future<List<QueueTicket>> getActiveTickets() async {
     try {
       final snapshot = await _firestore
           .collection('queueTickets')
-          .where('status', whereIn: ['waiting', 'serving']).get();
+          .where('status', whereIn: ['waiting', 'serving'])
+          .get();
 
-      // ✅ Today's boundaries (midnight to 23:59:59)
       final now = DateTime.now();
       final startOfToday = DateTime(now.year, now.month, now.day, 0, 0, 0);
       final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
-      return snapshot.docs
+      final tickets = snapshot.docs
           .map((doc) => QueueTicket.fromMap(
                 doc.id,
-                doc.data(),
+                doc.data() as Map<String, dynamic>,
               ))
           .where((ticket) {
-        // Only tickets on today's date
-        return !ticket.timeSlot.isBefore(startOfToday) &&
-            !ticket.timeSlot.isAfter(endOfToday);
-      }).toList();
+            return !ticket.timeSlot.isBefore(startOfToday) &&
+                   !ticket.timeSlot.isAfter(endOfToday);
+          }).toList();
+          
+      // ✅ THIS is the magic that sorts 9AM first, then 10AM.
+      tickets.sort((a, b) {
+        int timeCompare = a.timeSlot.compareTo(b.timeSlot);
+        if (timeCompare != 0) return timeCompare; 
+        return a.queueNumber.compareTo(b.queueNumber); 
+      });
+          
+      return tickets;
     } catch (e) {
       print('❌ Error getting active tickets: $e');
       return [];
     }
   }
-
   /// Get document type IDs that the student already has pending
 /// (waiting or serving tickets that include that document).
 Future<Set<String>> getPendingDocumentIdsForStudent(String studentId) async {
@@ -406,6 +411,15 @@ Future<Set<String>> getPendingDocumentIdsForStudent(String studentId) async {
     } catch (e) {
       print('❌ Error deleting tickets by range: $e');
       return 0;
+    }
+  }
+    Future<bool> updateUserStatus(String uid, bool isActive) async {
+    try {
+      await _firestore.collection('users').doc(uid).update({'isActive': isActive});
+      return true;
+    } catch (e) {
+      print('❌ Error updating user status: $e');
+      return false;
     }
   }
 

@@ -1,15 +1,17 @@
 class AppUser {
   final String uid;
   final String email;
-  final String name; // Full name (for backward compatibility)
-  final String role; // 'admin', 'cashier', 'student'
+  final String name;
+  final String role;
   
-  // ✅ Student-specific fields
-  final String? studentNumber;   // e.g., "2023-00123"
+  final String? studentNumber;
   final String? firstName;
   final String? lastName;
-  final String? middleInitial;   // e.g., "D"
-  final String? yearLevel;       // e.g., "1st Year", "2nd Year"
+  final String? middleInitial;
+  final String? yearLevel;
+  final String? course;
+  
+  final bool isActive; 
 
   AppUser({
     required this.uid,
@@ -21,14 +23,14 @@ class AppUser {
     this.lastName,
     this.middleInitial,
     this.yearLevel,
+    this.course,
+    this.isActive = true, // Default to true when created
   });
 
-  /// Get formatted full name with middle initial
-  /// Example: "Dela Cruz, Juan D."
   String get fullName {
     if (firstName == null && lastName == null) return name;
     final mi = middleInitial != null && middleInitial!.isNotEmpty 
-        ? ' $middleInitial.' 
+        ? ' ${middleInitial}.' 
         : '';
     return '$lastName, $firstName$mi';
   }
@@ -43,6 +45,8 @@ class AppUser {
         'lastName': lastName,
         'middleInitial': middleInitial,
         'yearLevel': yearLevel,
+        'course': course,
+        'isActive': isActive,
       };
 
   factory AppUser.fromMap(String uid, Map<String, dynamic> map) => AppUser(
@@ -55,5 +59,7 @@ class AppUser {
         lastName: map['lastName'],
         middleInitial: map['middleInitial'],
         yearLevel: map['yearLevel'],
+        course: map['course'],
+        isActive: map['isActive'] ?? true, 
       );
 }

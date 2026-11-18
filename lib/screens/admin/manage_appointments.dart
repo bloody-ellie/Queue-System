@@ -30,7 +30,6 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Warning Banner
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -54,11 +53,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
             
             const SizedBox(height: 24),
             
-            // Date Range Selector
-            const Text(
-              'Select Date Range',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
+            const Text('Select Date Range', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             
             Row(
@@ -67,11 +62,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
                   child: ElevatedButton.icon(
                     onPressed: () => _selectStartDate(),
                     icon: const Icon(Icons.calendar_today),
-                    label: Text(
-                      _startDate == null
-                          ? 'From'
-                          : _formatDate(_startDate!),
-                    ),
+                    label: Text(_startDate == null ? 'From' : _formatDate(_startDate!)),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -79,11 +70,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
                   child: ElevatedButton.icon(
                     onPressed: () => _selectEndDate(),
                     icon: const Icon(Icons.calendar_today),
-                    label: Text(
-                      _endDate == null
-                          ? 'To'
-                          : _formatDate(_endDate!),
-                    ),
+                    label: Text(_endDate == null ? 'To' : _formatDate(_endDate!)),
                   ),
                 ),
               ],
@@ -111,9 +98,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: (_startDate != null && _endDate != null) ? _searchAppointments : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                    ),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
                     child: Text(_isLoading ? 'Loading...' : 'Search Appointments'),
                   ),
                 ),
@@ -134,7 +119,6 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
             
             const SizedBox(height: 16),
             
-            // Results
             if (_hasSearched) ...[
               Container(
                 padding: const EdgeInsets.all(12),
@@ -153,29 +137,22 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
                       ),
                     ),
                     if (_tickets.isNotEmpty)
-                      Icon(
-                        Icons.info_outline,
-                        color: Colors.orange.shade700,
-                      ),
+                      Icon(Icons.info_outline, color: Colors.orange.shade700),
                   ],
                 ),
               ),
               
               const SizedBox(height: 12),
               
-              // Ticket List
               Expanded(
                 child: _tickets.isEmpty
                     ? const Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.check_circle, size: 64, color: Colors.green),
+                            Icon(Icons.check_circle, size: 64, color: Colors.green),
                             SizedBox(height: 16),
-                            Text(
-                              'No appointments found for this date range.',
-                              style: TextStyle(fontSize: 16),
-                            ),
+                            Text('No appointments found for this date range.', style: TextStyle(fontSize: 16)),
                           ],
                         ),
                       )
@@ -188,14 +165,13 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
                             child: ListTile(
                               leading: CircleAvatar(
                                 backgroundColor: _getStatusColor(ticket.status),
-                                child: Text(
-                                  '${ticket.queueNumber}',
-                                  style: const TextStyle(color: Colors.white),
-                                ),
+                                child: Text('${ticket.queueNumber}', style: const TextStyle(color: Colors.white)),
                               ),
                               title: Text('Ticket #${ticket.queueNumber}'),
                               subtitle: Text(
-                                'Student ID: ${ticket.studentId}\nStatus: ${ticket.status.toUpperCase()}\nScheduled: ${_formatDateTime(ticket.timeSlot)}',
+                                'Student ID: ${ticket.studentId}\n'
+                                'Status: ${ticket.status.toUpperCase()}\n'
+                                'Scheduled: ${_formatDate(ticket.timeSlot)} | ${_formatTimeRange(ticket.timeSlot, ticket.timeSlotEnd)}',
                               ),
                               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                             ),
@@ -220,7 +196,6 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
     if (date != null) {
       setState(() {
         _startDate = date;
-        // If end date is before start, reset end
         if (_endDate != null && _endDate!.isBefore(date)) {
           _endDate = null;
         }
@@ -232,9 +207,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
 
   Future<void> _selectEndDate() async {
     if (_startDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a start date first.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a start date first.')));
       return;
     }
     final date = await showDatePicker(
@@ -266,9 +239,7 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
       });
     } catch (e) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -283,32 +254,18 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'You are about to delete ${_tickets.length} appointment(s) from ${_formatDate(_startDate!)} to ${_formatDate(_endDate!)}.',
-            ),
+            Text('You are about to delete ${_tickets.length} appointment(s) from ${_formatDate(_startDate!)} to ${_formatDate(_endDate!)}.'),
             const SizedBox(height: 12),
-            const Text(
-              'This will also delete all associated payments.',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            const Text('This will also delete all associated payments.', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
-            const Text(
-              'This action CANNOT be undone!',
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-            ),
+            const Text('This action CANNOT be undone!', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blueAccent,
-              foregroundColor: Colors.white,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
             child: const Text('Yes, Delete All'),
           ),
         ],
@@ -326,9 +283,6 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
     try {
       final deletedCount = await _fs.deleteTicketsByTimeSlotRange(_startDate!, _endDate!);
       
-      // Also delete related payments - we can use cleanup service or call firestore directly
-      // For simplicity, we'll just delete tickets and let the cleanup service handle payments later.
-      
       setState(() {
         _tickets = [];
         _hasSearched = false;
@@ -336,16 +290,11 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
       });
       
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ Deleted $deletedCount appointments!'),
-          backgroundColor: Colors.green,
-        ),
+        SnackBar(content: Text('✅ Deleted $deletedCount appointments!'), backgroundColor: Colors.green),
       );
     } catch (e) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Error: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Error: $e')));
     }
   }
 
@@ -353,25 +302,27 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
     return '${date.month}/${date.day}/${date.year}';
   }
 
-  String _formatDateTime(DateTime date) {
-    final hour = date.hour > 12 ? date.hour - 12 : date.hour;
-    final minute = date.minute.toString().padLeft(2, '0');
-    final period = date.hour >= 12 ? 'PM' : 'AM';
-    return '${date.month}/${date.day} at $hour:$minute $period';
+  String _formatTimeRange(DateTime start, DateTime? end) {
+    final startStr = _formatTime(start);
+    if (end == null) return startStr; 
+    final endStr = _formatTime(end);
+    return '$startStr - $endStr';
+  }
+
+  String _formatTime(DateTime time) {
+    final hour = time.hour > 12 ? time.hour - 12 : time.hour;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
   }
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'waiting':
-        return Colors.orange;
-      case 'serving':
-        return Colors.green;
-      case 'served':
-        return Colors.blue;
-      case 'passed':
-        return Colors.red;
-      default:
-        return Colors.grey;
+      case 'waiting': return Colors.orange;
+      case 'serving': return Colors.green;
+      case 'served': return Colors.blue;
+      case 'passed': return Colors.red;
+      default: return Colors.grey;
     }
   }
 }

@@ -28,6 +28,7 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
   Set<String> _pendingDocumentIds = {};
 
   DateTime? _selectedSlot;
+  DateTime? _selectedSlotEnd; 
   List<DocumentType> _documentTypes = [];
   bool _loading = true;
 
@@ -380,7 +381,13 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
         final auth = Provider.of<AuthProvider>(context, listen: false);
         await _fs.bookScheduleSlot(selected.id, auth.currentUser!.uid);
 
-        setState(() => _selectedSlot = selectedDateTime);
+          setState(() {
+          _selectedSlot = selectedDateTime;
+          _selectedSlotEnd = DateTime(
+            selected.date.year, selected.date.month, selected.date.day,
+            selected.endTime.hour, selected.endTime.minute,
+          );
+        });
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -448,6 +455,7 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
         queueNumber: queueNumber,
         status: 'waiting',
         timeSlot: _selectedSlot!,
+        timeSlotEnd: _selectedSlotEnd,
         createdAt: DateTime.now(),
         serviceItems: serviceItems,
         studentNumber: user.studentNumber ?? 'N/A',
