@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../models/queue_ticket.dart';
 import '../../providers/queue_provider.dart';
 import 'dart:async';
+import '../../services/firestore_service.dart';
 
 class TicketDetailScreen extends StatefulWidget {
   final QueueTicket ticket;
@@ -108,15 +109,72 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             _buildServicesSection(ticket),
             const SizedBox(height: 20),
 
-            Text(
+                        Text(
               'Wait for your queue number to be called by the cashier.',
               style: TextStyle(color: Colors.grey.shade600),
               textAlign: TextAlign.center,
             ),
+            
+            const SizedBox(height: 32),
+
+            // ✅ CANCEL BOOKING BUTTON
+            if (ticket.status == 'waiting')
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _confirmCancel(context, ticket),
+                  icon: const Icon(Icons.cancel, color: Colors.red),
+                  label: const Text('Cancel Booking', style: TextStyle(color: Colors.red)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  // ✅ NEW: Confirmation Dialog and Cancel Logic
+  Future<void> _confirmCancel(BuildContext context, QueueTicket ticket) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Cancel Booking?'),
+        content: const Text('Are you sure you want to cancel this slot? Your ticket will be deleted, and the time slot will be freed up for other students.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No, Keep it'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Yes, Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final fs = FirestoreService();
+      final success = await fs.cancelStudentTicket(ticket);
+
+      if (context.mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('✅ Booking cancelled successfully.'), backgroundColor: Colors.green),
+          );
+          Navigator.pop(context); // Go back to dashboard
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('❌ Failed to cancel booking.'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
 
   Widget _buildInfoRow(IconData icon, String label, String value) {

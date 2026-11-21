@@ -1,13 +1,66 @@
+import 'dart:async'; // ✅ Added for StreamSubscription
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/queue_provider.dart';
 import '../../models/queue_ticket.dart';
 import 'request_service_screen.dart';
 import 'ticket_detail_screen.dart';
+import 'notifications_screen.dart';
 
-class StudentDashboard extends StatelessWidget {
+class StudentDashboard extends StatefulWidget {
   const StudentDashboard({super.key});
+
+  @override
+  State<StudentDashboard> createState() => _StudentDashboardState();
+}
+
+class _StudentDashboardState extends State<StudentDashboard> {
+  bool _hasUnreadNotifications = false;
+  StreamSubscription? _notifSubscription; // ✅ Track the listener
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToNotifications();
+  }
+
+  @override
+  void dispose() {
+    _notifSubscription?.cancel(); // ✅ Clean up listener to prevent memory leaks
+    super.dispose();
+  }
+
+  void _listenToNotifications() {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final uid = auth.currentUser!.uid;
+
+    _notifSubscription = FirebaseFirestore.instance
+        .collection('notifications')
+        .orderBy('createdAt', descending: true)
+        .limit(1)
+        .snapshots()
+        .listen((notifSnap) async {
+      if (notifSnap.docs.isNotEmpty) {
+        final latestNotifTime = DateTime.parse(notifSnap.docs.first['createdAt']);
+        
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        final lastReadStr = userDoc.data()?['lastReadNotificationTime'];
+        
+        DateTime? lastReadTime;
+        if (lastReadStr != null) {
+          lastReadTime = DateTime.parse(lastReadStr);
+        }
+
+        bool hasUnread = lastReadTime == null || latestNotifTime.isAfter(lastReadTime);
+        
+        if (mounted) {
+          setState(() => _hasUnreadNotifications = hasUnread);
+        }
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +72,17 @@ class StudentDashboard extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Student Dashboard'),
         actions: [
+          IconButton(
+            icon: Badge(
+              isLabelVisible: _hasUnreadNotifications,
+              backgroundColor: Colors.red,
+              smallSize: 10, 
+              child: const Icon(Icons.notifications),
+            ),
+            onPressed: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
@@ -32,6 +96,7 @@ class StudentDashboard extends StatelessWidget {
       ),
       body: Column(
         children: [
+          // Student info card
           Container(
             width: double.infinity,
             margin: const EdgeInsets.all(16),
@@ -98,7 +163,8 @@ class StudentDashboard extends StatelessWidget {
 
           Expanded(
             child: StreamBuilder<List<QueueTicket>>(
-              stream: Provider.of<QueueProvider>(context).getTicketsForStudent(studentId),
+              stream: Provider.of<QueueProvider>(context)
+                  .getTicketsForStudent(studentId),
               builder: (ctx, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -142,7 +208,8 @@ class StudentDashboard extends StatelessWidget {
                       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: _statusColor(ticket.status).withValues(alpha: 0.2),
+                          // ✅ Changed to withOpacity for wider Flutter compatibility
+                          backgroundColor: _statusColor(ticket.status).withOpacity(0.2), 
                           child: Text(
                             '${ticket.queueNumber}',
                             style: TextStyle(
@@ -200,17 +267,17 @@ class StudentDashboard extends StatelessWidget {
     return '${date.month}/${date.day}/${date.year}';
   }
 
-  String _formatTimeRange(DateTime start, DateTime? end) {
-    final startStr = _formatTime(start);
-    if (end == null) return startStr; 
-    final endStr = _formatTime(end);
-    return '$startStr - $endStr';
-  }
-
   String _formatTime(DateTime time) {
     final hour = time.hour > 12 ? time.hour - 12 : time.hour;
     final minute = time.minute.toString().padLeft(2, '0');
     final period = time.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$minute $period';
+  }
+
+  String _formatTimeRange(DateTime start, DateTime? end) {
+    final startStr = _formatTime(start);
+    if (end == null) return startStr;
+    final endStr = _formatTime(end);
+    return '$startStr - $endStr';
   }
 }

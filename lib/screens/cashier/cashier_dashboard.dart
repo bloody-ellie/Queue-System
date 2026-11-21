@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/queue_provider.dart';
 import '../../models/queue_ticket.dart';
+import '../../models/user.dart'; 
 import '../../services/firestore_service.dart';
 
 class CashierDashboard extends StatefulWidget {
@@ -59,8 +60,13 @@ class _CashierDashboardState extends State<CashierDashboard> {
     final provider = Provider.of<QueueProvider>(context, listen: false);
     final auth = Provider.of<AuthProvider>(context, listen: false);
 
-    await provider.updateTicketStatus(ticket.id, status);
+    if (status == 'serving') {
+      await _fs.startServingTicket(ticket.id, auth.currentUser!.uid, auth.currentUser!.name);
+    } else {
+      await provider.updateTicketStatus(ticket.id, status);
+    }
 
+    // Confirm payments when served
     if (status == 'served') {
       final payments = await _fs.getPaymentsForTicket(ticket.id);
       for (var payment in payments) {
@@ -160,9 +166,9 @@ class _CashierDashboardState extends State<CashierDashboard> {
                     : ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         itemCount: _filtered.length,
-                        itemBuilder: (ctx, i) {
+                         itemBuilder: (ctx, i) {
                           final ticket = _filtered[i];
-                          return _buildTicketCard(ticket);
+                          return _buildTicketCard(ticket, auth.currentUser!); 
                         },
                       ),
           ),
@@ -171,7 +177,9 @@ class _CashierDashboardState extends State<CashierDashboard> {
     );
   }
 
-  Widget _buildTicketCard(QueueTicket ticket) {
+  Widget _buildTicketCard(QueueTicket ticket, AppUser currentUser) {
+    bool isLockedByOther = ticket.status == 'serving' && ticket.servingCashierId != currentUser.uid;
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
       elevation: 2,
@@ -181,6 +189,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header (Queue # and status)
             Row(
               children: [
                 CircleAvatar(
@@ -188,11 +197,7 @@ class _CashierDashboardState extends State<CashierDashboard> {
                   backgroundColor: _statusColor(ticket.status),
                   child: Text(
                     '${ticket.queueNumber}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -200,14 +205,8 @@ class _CashierDashboardState extends State<CashierDashboard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        ticket.studentName,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                      Text(
-                        '${ticket.studentNumber} • ${ticket.yearLevel}',
-                        style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                      ),
+                      Text(ticket.studentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text('${ticket.studentNumber} • ${ticket.yearLevel}', style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
                     ],
                   ),
                 ),
@@ -219,29 +218,24 @@ class _CashierDashboardState extends State<CashierDashboard> {
                   ),
                   child: Text(
                     ticket.status.toUpperCase(),
-                    style: TextStyle(
-                      color: _statusColor(ticket.status),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: _statusColor(ticket.status), fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
               ],
             ),
             const Divider(height: 20),
 
+            // Time slot
             Row(
               children: [
                 Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
                 const SizedBox(width: 6),
-                Text(
-                  'Slot: ${_formatDate(ticket.timeSlot)} | ${_formatTimeRange(ticket.timeSlot, ticket.timeSlotEnd)}',
-                  style: TextStyle(color: Colors.grey.shade700),
-                ),
+                Text('Slot: ${_formatTimeRange(ticket.timeSlot, ticket.timeSlotEnd)}', style: TextStyle(color: Colors.grey.shade700)),
               ],
             ),
             const SizedBox(height: 6),
 
+            // Services summary
             if (ticket.serviceItems.isNotEmpty) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -259,39 +253,62 @@ class _CashierDashboardState extends State<CashierDashboard> {
               const SizedBox(height: 6),
             ],
 
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (ticket.status == 'waiting')
-                  ElevatedButton.icon(
-                    onPressed: () => _updateStatus(ticket, 'serving'),
-                    icon: const Icon(Icons.play_arrow, size: 18),
-                    label: const Text('Start Serving'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                  ),
-                if (ticket.status == 'serving') ...[
-                  ElevatedButton.icon(
-                    onPressed: () => _updateStatus(ticket, 'served'),
-                    icon: const Icon(Icons.check, size: 18),
-                    label: const Text('Served'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () => _updateStatus(ticket, 'passed'),
-                    icon: const Icon(Icons.close, size: 18),
-                    label: const Text('Pass'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  ),
+            if (isLockedByOther)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50, 
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade300)
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.lock, color: Colors.orange, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${ticket.servingCashierName} is serving this student...',
+                        style: TextStyle(color: Colors.orange.shade900, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (ticket.status == 'waiting')
+                    ElevatedButton.icon(
+                      onPressed: () => _updateStatus(ticket, 'serving'),
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('Start Serving'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    ),
+                  if (ticket.status == 'serving') ...[
+                    ElevatedButton.icon(
+                      onPressed: () => _updateStatus(ticket, 'served'),
+                      icon: const Icon(Icons.check, size: 18),
+                      label: const Text('Served'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _updateStatus(ticket, 'passed'),
+                      icon: const Icon(Icons.close, size: 18),
+                      label: const Text('Pass'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    ),
+                  ],
                 ],
-              ],
-            ),
+              ),
           ],
         ),
       ),
     );
   }
-
+  
   Color _statusColor(String status) {
     switch (status) {
       case 'waiting':

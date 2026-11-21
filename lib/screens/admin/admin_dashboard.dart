@@ -34,7 +34,7 @@ class AdminDashboard extends StatelessWidget {
           children: [
             _buildCard(
               context,
-              'Manage Document Types',
+              'Manage Documents',
               Icons.description,
               () => Navigator.push(
                 context,
@@ -43,7 +43,7 @@ class AdminDashboard extends StatelessWidget {
             ),
             _buildCard(
               context,
-              'Manage Users (Students/Cashiers)',
+              'Manage Users',
               Icons.people,
               () => Navigator.push(
                 context,
@@ -62,7 +62,7 @@ class AdminDashboard extends StatelessWidget {
 
             _buildCard(
               context,
-              'Manage Schedules & Time Slots',
+              'Manage Schedules',
               Icons.calendar_today,
               () => Navigator.push(
                 context,
@@ -72,7 +72,7 @@ class AdminDashboard extends StatelessWidget {
  // ✅ NEW CARD
             _buildCard(
               context,
-              'Manage Appointments (Delete by Date)',
+              'Delete Appointments',
               Icons.delete_sweep,
               () => Navigator.push(
                 context,

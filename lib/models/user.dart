@@ -11,7 +11,8 @@ class AppUser {
   final String? yearLevel;
   final String? course;
   
-  final bool isActive; 
+  final bool isActive;
+  final DateTime? lastReadNotificationTime; // ✅ NEW FIELD
 
   AppUser({
     required this.uid,
@@ -24,7 +25,8 @@ class AppUser {
     this.middleInitial,
     this.yearLevel,
     this.course,
-    this.isActive = true, // Default to true when created
+    this.isActive = true,
+    this.lastReadNotificationTime,
   });
 
   String get fullName {
@@ -47,6 +49,7 @@ class AppUser {
         'yearLevel': yearLevel,
         'course': course,
         'isActive': isActive,
+        'lastReadNotificationTime': lastReadNotificationTime?.toIso8601String(),
       };
 
   factory AppUser.fromMap(String uid, Map<String, dynamic> map) => AppUser(
@@ -60,6 +63,9 @@ class AppUser {
         middleInitial: map['middleInitial'],
         yearLevel: map['yearLevel'],
         course: map['course'],
-        isActive: map['isActive'] ?? true, 
+        isActive: map['isActive'] ?? true,
+        lastReadNotificationTime: map['lastReadNotificationTime'] != null 
+            ? DateTime.parse(map['lastReadNotificationTime']) 
+            : null,
       );
 }

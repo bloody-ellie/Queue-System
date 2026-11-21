@@ -25,19 +25,6 @@ class _ManageUsersState extends State<ManageUsers> {
           backgroundColor: Colors.white,
           iconTheme: const IconThemeData(color: Colors.black),
           elevation: 1,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.person_add),
-              tooltip: 'Create New User',
-              onPressed: () async {
-                final created = await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CreateUserScreen()),
-                );
-                if (created == true) setState(() {});
-              },
-            ),
-          ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(60),
             child: Container(
@@ -106,9 +93,13 @@ class _UserListState extends State<_UserList> {
     _loadUsers();
   }
 
-  Future<void> _loadUsers() async {
+    Future<void> _loadUsers() async {
     setState(() => _isLoading = true);
     final users = await _fs.getUsersByRole(widget.role);
+    
+    // ✅ Sort alphabetically on load
+    users.sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+
     setState(() {
       _allUsers = users;
       _filtered = users;
@@ -130,9 +121,10 @@ class _UserListState extends State<_UserList> {
           return matchesName || matchesEmail || matchesId;
         }).toList();
       }
+      
+      _filtered.sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
     });
   }
-
   Future<void> _deleteUser(AppUser user) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -229,41 +221,39 @@ class _UserListState extends State<_UserList> {
                           ),
                       ],
                     ),
-                                        trailing: Row(
+
+                    trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // ✅ NEW: Active/Inactive Switch for Students
+                        // ✅ FIXED: Active/Inactive Switch with FittedBox to prevent overflow
                         if (widget.role == 'student')
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Switch(
-                                value: user.isActive,
-                                activeColor: Colors.green,
-                                onChanged: (val) async {
-                                  // Optimistically update UI
-                                  setState(() {
-                                    final index = _allUsers.indexOf(user);
-                                    _allUsers[index] = AppUser(
-                                      uid: user.uid, email: user.email, name: user.name, role: user.role,
-                                      studentNumber: user.studentNumber, firstName: user.firstName, 
-                                      lastName: user.lastName, middleInitial: user.middleInitial, 
-                                      yearLevel: user.yearLevel, course: user.course, isActive: val,
-                                    );
-                                    _onSearch(_searchCtrl.text); // Refresh filter
-                                  });
-                                  await _fs.updateUserStatus(user.uid, val);
-                                },
+                          SizedBox(
+                            height: 48, // Constrain to ListTile height
+                            child: FittedBox(
+                              fit: BoxFit.fitHeight,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Switch(
+                                    value: user.isActive,
+                                    activeColor: Colors.green,
+                                    onChanged: (val) async {
+                                      setState(() => _isLoading = true); 
+                                      await _fs.updateUserStatus(user.uid, val);
+                                      await _loadUsers(); 
+                                    },
+                                  ),
+                                  Text(
+                                    user.isActive ? 'Active' : 'Inactive',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: user.isActive ? Colors.green : Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Text(
-                                user.isActive ? 'Active' : 'Inactive',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: user.isActive ? Colors.green : Colors.red,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         
                         // Edit is only for students
@@ -279,7 +269,7 @@ class _UserListState extends State<_UserList> {
                             },
                           ),
                         
-                        // ✅ Delete is now ONLY for Cashiers (Students use the switch)
+                        // ✅ Delete is ONLY for Cashiers
                         if (widget.role == 'cashier')
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
@@ -287,6 +277,7 @@ class _UserListState extends State<_UserList> {
                           ),
                       ],
                     ),
+
                   ),
                 );
               },

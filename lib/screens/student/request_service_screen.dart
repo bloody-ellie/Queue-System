@@ -10,6 +10,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/queue_provider.dart';
 import '../../services/firestore_service.dart';
 
+ String? _selectedScheduleId;
 class RequestServiceScreen extends StatefulWidget {
   const RequestServiceScreen({super.key});
 
@@ -20,11 +21,9 @@ class RequestServiceScreen extends StatefulWidget {
 class _RequestServiceScreenState extends State<RequestServiceScreen> {
   final FirestoreService _fs = FirestoreService();
 
-  // Multi-select state
   bool _includeTuition = false;
   final Set<String> _selectedDocumentIds = {};
 
-  // ✅ Documents student already has pending — cannot rebook
   Set<String> _pendingDocumentIds = {};
 
   DateTime? _selectedSlot;
@@ -83,6 +82,23 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
     } catch (e) {
       print('❌ Error loading pending documents: $e');
     }
+  }
+
+  // ✅ HELPER: Top-aligned Snackbar
+  void _showTopSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(color: Colors.white)),
+        backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
+        behavior: SnackBarBehavior.floating, // ✅ Required for margin to work
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 160, 
+          left: 16, 
+          right: 16,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
   }
 
   @override
@@ -243,7 +259,7 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
                       ),
                       child: Text(
                         _hasSelection()
-                            ? 'Book Slot ${_getTotalText()}'
+                            ? 'Book Slot'
                             : 'Select at least one service',
                       ),
                     ),
@@ -261,42 +277,39 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
     if (itemCount == 0) {
       return Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
-        child: const Text('No services selected', style: TextStyle(color: Colors.grey)),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Text(
+          'No services selected',
+          style: TextStyle(color: Colors.grey),
+        ),
       );
     }
 
-    final items = <String>[];
-    if (_includeTuition) items.add('Tuition (Free)');
-    for (var id in _selectedDocumentIds) {
-      final doc = _documentTypes.firstWhere((d) => d.id == id);
-      items.add('${doc.name} (₱${doc.price.toStringAsFixed(2)})');
-    }
-
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.blue.shade50,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.blue.shade200),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('${_getItemCount()} service(s) selected', style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          ...items.map((item) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Text('• $item', style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
-              )),
-          const SizedBox(height: 8),
-          if (documentTotal > 0)
-            Text(
-              'Document Total: ₱${documentTotal.toStringAsFixed(2)}',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
+          Text(
+            '${_getItemCount()} service(s) selected',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          Text(
+            documentTotal > 0 ? 'Total: ₱${documentTotal.toStringAsFixed(2)}' : 'Total: -',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: documentTotal > 0 ? Colors.blue.shade800 : Colors.green,
             ),
-          if (documentTotal == 0 && _includeTuition)
-            const Text('No document fees (Tuition only)', style: TextStyle(color: Colors.green)),
+          ),
         ],
       ),
     );
@@ -320,12 +333,6 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
     return count;
   }
 
-  String _getTotalText() {
-    final docTotal = _calculateDocumentTotal();
-    if (docTotal > 0) return '(Documents: ₱${docTotal.toStringAsFixed(2)})';
-    else if (_includeTuition) return '(Tuition only - no fee)';
-    return '';
-  }
 
   Future<void> _selectSlot(BuildContext context) async {
     try {
@@ -350,11 +357,7 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
       }).toList();
 
       if (availableSchedules.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No available time slots. Please check back later.')),
-          );
-        }
+        if (mounted) _showTopSnackBar('No available time slots. Please check back later.', isError: true);
         return;
       }
 
@@ -376,51 +379,45 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
         final selectedDateTime = DateTime(
           selected.date.year, selected.date.month, selected.date.day,
           selected.startTime.hour, selected.startTime.minute,
+          
         );
 
         final auth = Provider.of<AuthProvider>(context, listen: false);
-        await _fs.bookScheduleSlot(selected.id, auth.currentUser!.uid);
 
-          setState(() {
+        setState(() {
           _selectedSlot = selectedDateTime;
           _selectedSlotEnd = DateTime(
             selected.date.year, selected.date.month, selected.date.day,
             selected.endTime.hour, selected.endTime.minute,
           );
+          _selectedScheduleId = selected.id;
         });
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Slot booked for ${_formatDate(selected.date)} at ${selected.timeRange}'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          _showTopSnackBar('Slot booked for ${_formatDate(selected.date)} at ${selected.timeRange}');
         }
       }
     } catch (e) {
       Navigator.pop(context);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) _showTopSnackBar('Error: $e', isError: true);
     }
   }
 
   void _submitRequest(String studentId) async {
     if (!_hasSelection()) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select at least one service')));
+      _showTopSnackBar('Select at least one service', isError: true);
       return;
     }
 
     if (_selectedSlot == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pick a time slot')));
+      _showTopSnackBar('Pick a time slot', isError: true);
       return;
     }
 
     final conflicting = _selectedDocumentIds.intersection(_pendingDocumentIds);
     if (conflicting.isNotEmpty) {
       final names = conflicting.map((id) => _documentTypes.firstWhere((d) => d.id == id).name).join(', ');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ You already have a pending request for: $names'), backgroundColor: Colors.red),
-      );
+      _showTopSnackBar('❌ You already have a pending request for: $names', isError: true);
       return;
     }
 
@@ -430,7 +427,10 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
         barrierDismissible: false,
         builder: (ctx) => const Center(child: CircularProgressIndicator()),
       );
-
+        if (_selectedScheduleId != null) {
+        final auth = Provider.of<AuthProvider>(context, listen: false);
+        await _fs.bookScheduleSlot(_selectedScheduleId!, auth.currentUser!.uid);
+      }
       int count = await _fs.getTicketCountForSlot(_selectedSlot!);
       int queueNumber = count + 1;
 
@@ -487,14 +487,12 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
       Navigator.pop(context);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ticket #$queueNumber created! (${paymentIds.length} payment(s))'), backgroundColor: Colors.green),
-        );
+        _showTopSnackBar('Ticket #$queueNumber created! (${paymentIds.length} payment(s))');
         Navigator.pop(context);
       }
     } catch (e) {
       Navigator.pop(context);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      if (mounted) _showTopSnackBar('Error: $e', isError: true);
     }
   }
 
@@ -508,7 +506,6 @@ class _RequestServiceScreenState extends State<RequestServiceScreen> {
   }
 }
 
-// ✅ FIXED: Class is now outside, at the bottom of the file
 class _CalendarSchedulePicker extends StatefulWidget {
   final Map<DateTime, List<Schedule>> schedulesByDate;
 
@@ -519,7 +516,15 @@ class _CalendarSchedulePicker extends StatefulWidget {
 }
 
 class _CalendarSchedulePickerState extends State<_CalendarSchedulePicker> {
-  DateTime _selectedDate = DateTime.now();
+  late DateTime _selectedDate;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pick the first available date by default
+    final sortedDates = widget.schedulesByDate.keys.toList()..sort();
+    _selectedDate = sortedDates.first;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -532,12 +537,13 @@ class _CalendarSchedulePickerState extends State<_CalendarSchedulePicker> {
 
     return AlertDialog(
       title: const Text('Select Time Slot'),
-      contentPadding: const EdgeInsets.all(8),
+      // ✅ Use a responsive height so it fits on both web and mobile
       content: SizedBox(
-        width: 400,
-        height: 450,
+        width: 450,
+        height: MediaQuery.of(context).size.height * 0.75, 
         child: Column(
           children: [
+            // ✅ The standard Calendar Grid you liked
             CalendarDatePicker(
               initialDate: _selectedDate,
               firstDate: firstDate,
@@ -545,25 +551,57 @@ class _CalendarSchedulePickerState extends State<_CalendarSchedulePicker> {
               onDateChanged: (date) => setState(() => _selectedDate = date),
               selectableDayPredicate: (date) {
                 final d = DateTime(date.year, date.month, date.day);
+                // Only allow clicking days that have schedules
                 return widget.schedulesByDate.containsKey(d);
               },
             ),
             const Divider(),
+            
+            // ✅ Title for the times section
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 1.0),
+              child: Text(
+                'Available Times', 
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)
+              ),
+            ),
+
+            // ✅ Grid View for Times (Shows 4-6 slots at a glance)
             Expanded(
               child: slotsForDay.isEmpty
                   ? const Center(child: Text('No slots available on this day.'))
-                  : ListView.builder(
+                  : GridView.builder(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2, // 2 columns to save space
+                        childAspectRatio: 3.0, // Flatter buttons
+                        crossAxisSpacing: 2,
+                        mainAxisSpacing: 2,
+                      ),
                       itemCount: slotsForDay.length,
                       itemBuilder: (ctx, i) {
                         final schedule = slotsForDay[i];
-                        return Card(
-                          color: Colors.blue.shade50,
-                          child: ListTile(
-                            leading: const Icon(Icons.access_time, color: Colors.blue),
-                            title: Text(schedule.timeRange, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('${schedule.bookedStudents.length}/${schedule.maxStudents} booked'),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => Navigator.pop(context, schedule),
+                        return InkWell(
+                          onTap: () => Navigator.pop(context, schedule),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  schedule.timeRange,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                                Text(
+                                  '${schedule.bookedStudents.length}/${schedule.maxStudents} booked',
+                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       },
@@ -573,7 +611,10 @@ class _CalendarSchedulePickerState extends State<_CalendarSchedulePicker> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
       ],
     );
   }

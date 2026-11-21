@@ -283,6 +283,13 @@ class _ManageAppointmentsState extends State<ManageAppointments> {
     try {
       final deletedCount = await _fs.deleteTicketsByTimeSlotRange(_startDate!, _endDate!);
       
+      // ✅ Send Notification
+      await _fs.sendNotification(
+        'Appointments Cancelled',
+        'All appointments from ${_formatDate(_startDate!)} to ${_formatDate(_endDate!)} have been deleted by the Admin.',
+      );
+
+
       setState(() {
         _tickets = [];
         _hasSearched = false;

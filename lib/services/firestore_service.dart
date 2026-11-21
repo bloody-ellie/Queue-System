@@ -70,7 +70,7 @@ Future<void> bulkCreateSchedules(List<Schedule> schedules) async {
     // ---------- User Management ----------
   
   /// Fetch all users by role ('student' or 'cashier')
-  Future<List<AppUser>> getUsersByRole(String role) async {
+    Future<List<AppUser>> getUsersByRole(String role) async {
     try {
       final snapshot = await _firestore
           .collection('users')
@@ -78,18 +78,16 @@ Future<void> bulkCreateSchedules(List<Schedule> schedules) async {
           .get();
 
       final users = snapshot.docs
-          .map((doc) => AppUser.fromMap(doc.id, doc.data()))
+          .map((doc) => AppUser.fromMap(doc.id, doc.data() as Map<String, dynamic>))
           .toList();
-
-      // Sort alphabetically by name
       users.sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+      
       return users;
     } catch (e) {
       print('❌ Error getting users by role: $e');
       return [];
     }
   }
-
   /// Update a student's editable fields (Student ID is intentionally omitted)
   Future<bool> updateStudentInfo({
     required String uid,
@@ -253,7 +251,6 @@ Future<void> bulkCreateSchedules(List<Schedule> schedules) async {
     final data = doc.data() as Map<String, dynamic>;
     final bookedStudents = List<String>.from(data['bookedStudents'] ?? []);
 
-    if (bookedStudents.contains(studentId)) return;
 
     bookedStudents.add(studentId);
     await _firestore.collection('schedules').doc(scheduleId).update({
@@ -413,16 +410,162 @@ Future<Set<String>> getPendingDocumentIdsForStudent(String studentId) async {
       return 0;
     }
   }
-    Future<bool> updateUserStatus(String uid, bool isActive) async {
+  // ---------- User Status ----------
+  Future<void> updateUserStatus(String uid, bool isActive) async {
     try {
+      // 1. Update the user's active status
       await _firestore.collection('users').doc(uid).update({'isActive': isActive});
-      return true;
+
+      // 2. If deactivating, clean up their active tickets
+      if (!isActive) {
+        // Find all waiting or serving tickets for this student
+        final ticketsSnap = await _firestore
+            .collection('queueTickets')
+            .where('studentId', isEqualTo: uid)
+            .where('status', whereIn: ['waiting', 'serving'])
+            .get();
+
+        for (var doc in ticketsSnap.docs) {
+          final data = doc.data();
+          final ticketId = doc.id;
+          final timeSlot = DateTime.parse(data['timeSlot']);
+
+          // A. Delete associated payments
+          final payments = await getPaymentsForTicket(ticketId);
+          for (var payment in payments) {
+            await _firestore.collection('payments').doc(payment.id).delete();
+          }
+
+          // B. Delete the queue ticket
+          await doc.reference.delete();
+
+          // C. Free up the schedule slot
+          final schedulesSnap = await _firestore.collection('schedules').get();
+          for (var scheduleDoc in schedulesSnap.docs) {
+            final scheduleData = scheduleDoc.data();
+            final bookedStudents = List<String>.from(scheduleData['bookedStudents'] ?? []);
+            
+            if (bookedStudents.contains(uid)) {
+              final scheduleDate = DateTime.parse(scheduleData['date']);
+              if (scheduleDate.year == timeSlot.year &&
+                  scheduleDate.month == timeSlot.month &&
+                  scheduleDate.day == timeSlot.day &&
+                  scheduleData['startHour'] == timeSlot.hour &&
+                  scheduleData['startMinute'] == timeSlot.minute) {
+                
+                bookedStudents.remove(uid); // Remove one instance
+                await scheduleDoc.reference.update({'bookedStudents': bookedStudents});
+                break; 
+              }
+            }
+          }
+        }
+        print('✅ Deactivated student $uid and cleaned up their active tickets.');
+      }
     } catch (e) {
       print('❌ Error updating user status: $e');
-      return false;
+    }
+  }
+   // ---------- Notifications ----------
+  Future<void> sendNotification(String title, String message) async {
+    try {
+      await _firestore.collection('notifications').add({
+        'title': title,
+        'message': message,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Error sending notification: $e');
     }
   }
 
+  // ✅ NEW: Mark notifications as read
+  Future<void> markNotificationsAsRead(String uid) async {
+    try {
+      await _firestore.collection('users').doc(uid).update({
+        'lastReadNotificationTime': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Error marking notifications as read: $e');
+    }
+  }
+  
+    // ---------- Bulk Delete Schedules ----------
+  Future<int> bulkDeleteSchedulesByDateRange(DateTime startDate, DateTime endDate) async {
+    try {
+      final start = DateTime(startDate.year, startDate.month, startDate.day, 0, 0, 0);
+      final end = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+
+      // 1. Find all schedules in this range
+      final snapshot = await _firestore
+          .collection('schedules')
+          .where('date', isGreaterThanOrEqualTo: start.toIso8601String())
+          .where('date', isLessThanOrEqualTo: end.toIso8601String())
+          .get();
+
+      if (snapshot.docs.isEmpty) return 0;
+
+      // 2. Delete them using a batch
+      final batch = _firestore.batch();
+      for (var doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      
+      return snapshot.docs.length;
+    } catch (e) {
+      print('❌ Error bulk deleting schedules: $e');
+      return 0;
+    }
+  }
+
+  // ---------- Cancel Student Booking ----------
+  Future<bool> cancelStudentTicket(QueueTicket ticket) async {
+    try {
+      // 1. Delete the queue ticket
+      await _firestore.collection('queueTickets').doc(ticket.id).delete();
+      
+      // 2. Delete associated payments
+      final payments = await getPaymentsForTicket(ticket.id);
+      for (var payment in payments) {
+        await _firestore.collection('payments').doc(payment.id).delete();
+      }
+
+      // 3. Free up the slot in the schedule
+      final schedulesSnap = await _firestore.collection('schedules').get();
+      for (var doc in schedulesSnap.docs) {
+        final data = doc.data();
+        final bookedStudents = List<String>.from(data['bookedStudents'] ?? []);
+        
+        if (bookedStudents.contains(ticket.studentId)) {
+          // Ensure we are freeing up the CORRECT schedule by matching date/time
+          final scheduleDate = DateTime.parse(data['date']);
+          if (scheduleDate.year == ticket.timeSlot.year &&
+              scheduleDate.month == ticket.timeSlot.month &&
+              scheduleDate.day == ticket.timeSlot.day &&
+              data['startHour'] == ticket.timeSlot.hour &&
+              data['startMinute'] == ticket.timeSlot.minute) {
+            
+            bookedStudents.remove(ticket.studentId); 
+            await doc.reference.update({'bookedStudents': bookedStudents});
+            break; 
+          }
+        }
+      }
+      return true;
+    } catch (e) {
+      print('❌ Error cancelling ticket: $e');
+      return false;
+    }
+  }
+  // ---------- Ticket Locking ----------
+  Future<void> startServingTicket(String ticketId, String cashierId, String cashierName) async {
+    await _firestore.collection('queueTickets').doc(ticketId).update({
+      'status': 'serving',
+      'servingCashierId': cashierId,
+      'servingCashierName': cashierName,
+    });
+  }
   Future<List<Payment>> getPaymentsByDate(DateTime date) async {
     try {
       final start = DateTime(date.year, date.month, date.day, 0, 0, 0);

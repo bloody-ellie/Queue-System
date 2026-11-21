@@ -15,6 +15,10 @@ class _ManageSchedulesState extends State<ManageSchedules> {
   List<Schedule> _schedules = [];
   bool _isLoading = true;
 
+  // ✅ Kept your UI controllers
+  final TextEditingController _maxStudentsCtrl = TextEditingController(text: '20');
+  final TextEditingController _bulkMaxStudentsCtrl = TextEditingController(text: '20');
+
   // Single Schedule Form State
   DateTime? _selectedDate;
   TimeOfDay? _startTime;
@@ -45,12 +49,98 @@ class _ManageSchedulesState extends State<ManageSchedules> {
     });
   }
 
+  // ✅ Helper method for duplicates
+  bool _isDuplicate(DateTime date, TimeOfDay start, TimeOfDay end) {
+    return _schedules.any((s) =>
+        s.date.year == date.year &&
+        s.date.month == date.month &&
+        s.date.day == date.day &&
+        s.startTime.hour == start.hour &&
+        s.startTime.minute == start.minute &&
+        s.endTime.hour == end.hour &&
+        s.endTime.minute == end.minute);
+  }
+
+  void _showBulkDeleteDialog() {
+    DateTime? start = DateTime.now();
+    DateTime? end = DateTime.now().add(const Duration(days: 30));
+    bool isDeleting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Bulk Delete Schedules'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Warning: This will permanently delete ALL schedules in this range.', style: TextStyle(color: Colors.red)),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () async {
+                            final d = await showDatePicker(context: context, initialDate: start!, firstDate: DateTime(2024), lastDate: DateTime(2030));
+                            if (d != null) setDialogState(() => start = d);
+                          },
+                          child: Text('From: ${DateFormat('MMM d').format(start!)}'),
+                        ),
+                      ),
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () async {
+                            final d = await showDatePicker(context: context, initialDate: end!, firstDate: start!, lastDate: DateTime(2030));
+                            if (d != null) setDialogState(() => end = d);
+                          },
+                          child: Text('To: ${DateFormat('MMM d').format(end!)}'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                ElevatedButton(
+                  onPressed: isDeleting ? null : () async {
+                    setDialogState(() => isDeleting = true);
+                    final count = await _fs.bulkDeleteSchedulesByDateRange(start!, end!);
+                    
+                    await _fs.sendNotification(
+                      'Schedules Cancelled',
+                      'All schedules from ${DateFormat('MMM d').format(start!)} to ${DateFormat('MMM d').format(end!)} have been cancelled by the Admin.',
+                    );
+
+                    setDialogState(() => isDeleting = false);
+                    if (mounted) {
+                      Navigator.pop(context);
+                      _loadSchedules();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('✅ Deleted $count schedules!'), backgroundColor: Colors.green),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: isDeleting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showBulkGenerateDialog() {
     _bulkStartDate = DateTime.now();
     _bulkEndDate = DateTime.now().add(const Duration(days: 30));
     _selectedDays = {1, 2, 3, 4, 5};
     _bulkStartTime = const TimeOfDay(hour: 8, minute: 0);
     _bulkEndTime = const TimeOfDay(hour: 17, minute: 0);
+    _bulkMaxStudentsCtrl.text = '10';
 
     showDialog(
       context: context,
@@ -106,6 +196,23 @@ class _ManageSchedulesState extends State<ManageSchedules> {
                       ],
                     ),
                     const SizedBox(height: 12),
+                    const Text('Max Students per Slot', style: TextStyle(fontWeight: FontWeight.bold)),
+                    TextFormField(
+                      controller: _bulkMaxStudentsCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: '',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.people),
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          _bulkMaxStudents = int.tryParse(val) ?? 1;
+                        });
+                      },
+                    ),
+                    
+                    const SizedBox(height: 12),
                     const Text('Time per Slot', style: TextStyle(fontWeight: FontWeight.bold)),
                     Row(
                       children: [
@@ -153,34 +260,63 @@ class _ManageSchedulesState extends State<ManageSchedules> {
 
   Future<void> _generateBulkSchedules() async {
     if (_selectedDays.isEmpty || _bulkStartDate == null || _bulkEndDate == null) return;
+    if (_bulkMaxStudents < 1) _bulkMaxStudents = 1;
 
     List<Schedule> newSchedules = [];
+    int skippedDuplicates = 0; // ✅ Added missing variable
     DateTime current = _bulkStartDate!;
 
     while (current.isBefore(_bulkEndDate!.add(const Duration(days: 1)))) {
       if (_selectedDays.contains(current.weekday)) {
-        newSchedules.add(
-          Schedule(
-            id: '',
-            day: _getDayOfWeek(current),
-            date: current,
-            startTime: _bulkStartTime,
-            endTime: _bulkEndTime,
-            maxStudents: _bulkMaxStudents,
-            isAvailable: true,
-            bookedStudents: [],
-          ),
-        );
+        
+        // ✅ Fixed logic: Check duplicate first
+        if (_isDuplicate(current, _bulkStartTime, _bulkEndTime)) {
+          skippedDuplicates++;
+        } else {
+          newSchedules.add(
+            Schedule(
+              id: '',
+              day: _getDayOfWeek(current),
+              date: current,
+              startTime: _bulkStartTime,
+              endTime: _bulkEndTime,
+              maxStudents: _bulkMaxStudents,
+              isAvailable: true,
+              bookedStudents: [],
+            ),
+          );
+        }
       }
       current = current.add(const Duration(days: 1));
     }
 
     if (newSchedules.isNotEmpty) {
       await _fs.bulkCreateSchedules(newSchedules);
+      
+      await _fs.sendNotification(
+        'Bulk Schedules Released',
+        'Admin generated new schedules from ${DateFormat('MMM d').format(_bulkStartDate!)} to ${DateFormat('MMM d').format(_bulkEndDate!)}.',
+      );
+      
       _loadSchedules();
+      
+      if (mounted) {
+        String message = '✅ Generated ${newSchedules.length} schedules!';
+        if (skippedDuplicates > 0) {
+          message += ' ($skippedDuplicates duplicates skipped)';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.green),
+        );
+      }
+    } else {
+      // ✅ If all were duplicates
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ Generated ${newSchedules.length} schedules!'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('❌ All selected schedules already exist. No new schedules created.'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -191,6 +327,7 @@ class _ManageSchedulesState extends State<ManageSchedules> {
     _startTime = const TimeOfDay(hour: 9, minute: 0);
     _endTime = const TimeOfDay(hour: 10, minute: 0);
     _maxStudents = 5;
+    _maxStudentsCtrl.text = '5';
 
     showDialog(
       context: context,
@@ -238,23 +375,20 @@ class _ManageSchedulesState extends State<ManageSchedules> {
                       },
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Text('Max Students: '),
-                        Expanded(
-                          child: Slider(
-                            value: _maxStudents.toDouble(),
-                            min: 1, max: 20, divisions: 19,
-                            label: _maxStudents.toString(),
-                            onChanged: (value) => setDialogState(() => _maxStudents = value.toInt()),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
-                          child: Text(_maxStudents.toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        ),
-                      ],
+                    const Text('Max Students per Slot', style: TextStyle(fontWeight: FontWeight.bold)),
+                    TextFormField(
+                      controller: _maxStudentsCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: '',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.people),
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          _maxStudents = int.tryParse(val) ?? 1;
+                        });
+                      },
                     ),
                   ],
                 ),
@@ -271,6 +405,8 @@ class _ManageSchedulesState extends State<ManageSchedules> {
   }
 
   Future<void> _createSchedule() async {
+    if (_maxStudents < 1) _maxStudents = 1;
+    
     if (_selectedDate != null) {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
@@ -291,6 +427,17 @@ class _ManageSchedulesState extends State<ManageSchedules> {
       return;
     }
 
+    // ✅ Duplicate Check
+    if (_isDuplicate(_selectedDate!, _startTime!, _endTime!)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ A schedule with this exact Date and Time already exists!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final schedule = Schedule(
       id: '',
       day: _getDayOfWeek(_selectedDate!),
@@ -303,11 +450,16 @@ class _ManageSchedulesState extends State<ManageSchedules> {
     );
 
     await _fs.createSchedule(schedule);
+    
+    await _fs.sendNotification(
+      'New Schedule Released',
+      'New schedules available for ${_formatDate(_selectedDate!)} from ${_formatTime(_startTime!)} to ${_formatTime(_endTime!)}.',
+    );
 
     if (mounted) {
       Navigator.pop(context);
       _loadSchedules();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Schedule created!')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Schedule created!'), backgroundColor: Colors.green));
     }
   }
 
@@ -338,13 +490,30 @@ class _ManageSchedulesState extends State<ManageSchedules> {
 
     if (confirm == true) {
       await _fs.deleteSchedule(schedule.id);
+      
+      await _fs.sendNotification(
+        'Schedule Cancelled',
+        'The schedule on ${schedule.dayName} ${_formatDate(schedule.date)} (${schedule.timeRange}) has been cancelled by the Admin.',
+      );
+      
       _loadSchedules();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Schedule deleted!')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Schedule deleted!')),
+        );
+      }
     }
   }
 
   Future<void> _toggleScheduleAvailability(Schedule schedule) async {
     await _fs.updateScheduleAvailability(schedule.id, !schedule.isAvailable);
+    
+    String status = schedule.isAvailable ? 'UNAVAILABLE' : 'AVAILABLE';
+    await _fs.sendNotification(
+      'Schedule Update',
+      'The schedule on ${_formatDate(schedule.date)} (${schedule.timeRange}) is now $status.',
+    );
+    
     _loadSchedules();
   }
 
@@ -364,13 +533,32 @@ class _ManageSchedulesState extends State<ManageSchedules> {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Filter out past schedules
     final visibleSchedules = _schedules.where((s) => !s.isPast).toList();
+    
+    // ✅ 2. Sort them by Date, then by Start Time
+    visibleSchedules.sort((a, b) {
+      // First, compare the date (Year/Month/Day)
+      int dateCompare = a.date.compareTo(b.date);
+      if (dateCompare != 0) return dateCompare;
+      
+      // If dates are the exact same, compare the Start Time (Hour)
+      int hourCompare = a.startTime.hour.compareTo(b.startTime.hour);
+      if (hourCompare != 0) return hourCompare;
+      
+      // If hours are the same, compare the minutes
+      return a.startTime.minute.compareTo(b.startTime.minute);
+    });
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Manage Schedules'),
         actions: [
-          // ✅ FIXED: Added the missing Bulk Generate button
+          IconButton(
+            icon: const Icon(Icons.delete_sweep, color: Colors.red), 
+            tooltip: 'Bulk Delete Schedules',
+            onPressed: _showBulkDeleteDialog,
+          ),
           IconButton(
             icon: const Icon(Icons.auto_awesome, color: Colors.amber),
             tooltip: 'Auto-Generate Schedules',
